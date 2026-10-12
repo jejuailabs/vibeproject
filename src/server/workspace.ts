@@ -4,6 +4,7 @@ import { db } from './firebase';
 import { DomainError, assertAdmin, assertCanRead, assertChannel, assertEditable, assertRevision, canReadIdea, validateSelection } from '@/lib/policy';
 import type { Activity, Command, Comment, HistoryEvent, Idea, Member, Message, Project, Workspace } from '@/lib/types';
 import { z } from 'zod';
+import {characterIds} from '@/lib/characters';
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const short = z.string().trim().min(1).max(120);
@@ -15,6 +16,7 @@ const commandSchema = z.discriminatedUnion('type', [
  z.object({ type: z.literal('sendMessage'), channel: id, body: body.max(2000) }),
  z.object({ type: z.literal('selectIdea'), ideaId: id, revision: z.number().int().nonnegative(), projectName: short, reason: short }),
  z.object({ type: z.literal('closeIdea'), ideaId: id, revision: z.number().int().nonnegative(), reason: short }),
+ z.object({ type: z.literal('setAvatar'), avatarId: z.enum(characterIds) }).strict(),
  z.object({ type: z.literal('setActivity'), state: z.enum(['open','closed']) }),
 ]);
 export const envelopeSchema = z.object({ cohortId: id, requestId: z.string().uuid(), command: commandSchema });
@@ -103,7 +105,11 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
    tx.create(ref,{id:ref.id,ideaId:idea.id,title,reason,actorId:uid,createdAt:now,revision:idea.revision,
     snapshot:{title:idea.title,body:idea.body,scope:idea.scope,state:idea.state}});
   };
-  if(command.type==='createIdea') {
+  if(command.type==='setAvatar') {
+   tx.update(memberRef,{avatar:command.avatarId,updatedAt:now});
+   tx.update(c.collection('profiles').doc(uid),{avatar:command.avatarId,updatedAt:now});
+   result={id:uid};
+  } else if(command.type==='createIdea') {
    if(command.scope==='project' && !me.projectId) throw new DomainError('NO_PROJECT','먼저 프로젝트에 참여해주세요.',409);
    if(command.scope!=='owner') {
     const activity=await tx.get(c.collection('activities').doc('discovery'));

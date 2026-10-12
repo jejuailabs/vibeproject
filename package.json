@@ -12,6 +12,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@firebase/app": "0.14.9",
     "firebase": "12.10.0",
     "firebase-admin": "13.10.0",
     "lucide-react": "1.55.0",

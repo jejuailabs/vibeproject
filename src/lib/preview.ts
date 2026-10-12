@@ -1,4 +1,5 @@
 import type {Workspace,Command,Idea,HistoryEvent} from './types';
+import {isCharacterId} from './characters';
 import {assertAdmin,assertEditable,assertCanRead,assertChannel,validateSelection} from './policy';
 const date='2026-10-12T01:00:00.000Z';
 export function previewWorkspace():Workspace {
@@ -24,7 +25,11 @@ export function previewCommand(state:Workspace,command:Command):Workspace {
  const next=structuredClone(state), now=new Date().toISOString(), uid=next.me.id;
  const uuid=()=>crypto.randomUUID();
  const record=(idea:Idea,title:string,reason:string)=>next.events.unshift({id:uuid(),ideaId:idea.id,title,reason,actorId:uid,createdAt:now,revision:idea.revision,snapshot:{title:idea.title,body:idea.body,scope:idea.scope,state:idea.state}});
- if(command.type==='createIdea'){
+ if(command.type==='setAvatar'){
+  if(!next.me.active)throw new Error('기수 참여 권한이 필요합니다.');
+  if(!isCharacterId(command.avatarId))throw new Error('등록된 캐릭터를 선택해주세요.');
+  next.me.avatar=command.avatarId;const member=next.members.find(m=>m.id===uid);if(member)member.avatar=command.avatarId;
+ }else if(command.type==='createIdea'){
   if(command.scope!=='owner' && next.activity.state==='closed')throw new Error('현재 활동이 마감되었습니다.');
   if(command.scope==='project'&&!next.me.projectId)throw new Error('프로젝트에 먼저 참여해주세요.');
   const idea:Idea={id:uuid(),...command,ownerId:uid,projectId:command.scope==='project'?next.me.projectId:null,state:'shared',revision:1,version:1,createdAt:now,updatedAt:now};

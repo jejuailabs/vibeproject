@@ -1,3 +1,4 @@
+import type {CharacterId} from './characters';
 export type Role = 'participant' | 'facilitator' | 'admin';
 export type Scope = 'owner' | 'project' | 'cohort';
 export type IdeaState = 'shared' | 'selected' | 'closed_unselected';
@@ -23,4 +24,5 @@ export type Command =
  | { type: 'sendMessage'; channel: string; body: string }
  | { type: 'selectIdea'; ideaId: string; revision: number; projectName: string; reason: string }
  | { type: 'closeIdea'; ideaId: string; revision: number; reason: string }
+ | { type: 'setAvatar'; avatarId: CharacterId }
  | { type: 'setActivity'; state: 'open' | 'closed' };
