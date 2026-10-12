@@ -5,7 +5,7 @@ export class DomainError extends Error {
 }
 export function canReadIdea(member: Member, idea: Idea): boolean {
  if (!member.active) return false;
- if (idea.ownerId === member.id) return true;
+ if (idea.scope === 'owner') return idea.ownerId === member.id;
  if (idea.scope === 'cohort') return true;
  return idea.scope === 'project' && !!member.projectId && idea.projectId === member.projectId;
 }
