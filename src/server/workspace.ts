@@ -24,30 +24,34 @@ export function cohortRef(cohortId: string) { return db().collection('cohorts').
 
 async function getMember(c: ReturnType<typeof cohortRef>, uid: string) {
  const snapshot = await c.collection('members').doc(uid).get();
- if (!snapshot.exists || snapshot.data()?.active !== true) throw new DomainError('NOT_ENROLLED', '기수 초대가 필요합니다. 관리자에게 참여 등록을 요청해주세요.', 403);
+ if (!snapshot.exists || snapshot.data()?.active !== true) throw new DomainError('NOT_ENROLLED', '참가자 등록이 필요합니다. Google 계정으로 다시 로그인해주세요.', 403);
  return { ...snapshot.data(), id: uid } as Member;
 }
 
 export async function enroll(cohortId: string, identity: {uid:string;email:string;name:string;avatar:string}) {
- const c = cohortRef(cohortId);
- const key = createHash('sha256').update(identity.email).digest('hex');
+ const c = cohortRef(cohortId), email=identity.email.toLowerCase().trim();
+ const key = createHash('sha256').update(email).digest('hex');
  await db().runTransaction(async tx => {
   const ref = c.collection('members').doc(identity.uid);
-  const inviteRef = c.collection('invites').doc(key);
-  const [member, invite, cohort] = await Promise.all([tx.get(ref), tx.get(inviteRef), tx.get(c)]);
+  // Preserve previously assigned roles, including the initial administrator.
+  const grantRef = c.collection('invites').doc(key);
+  const [member, grant, cohort, settings] = await Promise.all([
+   tx.get(ref), tx.get(grantRef), tx.get(c), tx.get(c.collection('workshop').doc('settings'))
+  ]);
   if (!cohort.exists) throw new DomainError('NOT_READY', '기수 설정이 아직 완료되지 않았습니다.', 503);
   if (member.exists) {
    if (!member.data()?.active) throw new DomainError('FORBIDDEN', '참여 권한이 중지되었습니다.', 403);
    return;
   }
-  const value = invite.data();
-  if (!value || value.email !== identity.email || value.status !== 'pending' || value.expiresAt <= new Date().toISOString())
-   throw new DomainError('NOT_INVITED', '등록된 초대가 없습니다. 관리자에게 Google 이메일을 알려주세요.', 403);
-  const role = ['participant','facilitator','admin'].includes(value.role) ? value.role : 'participant';
+  if(cohort.data()?.status==='completed' || settings.data()?.data?.state==='completed')
+   throw new DomainError('CLOSED','종료된 기수에는 새로 참여할 수 없습니다.',403);
+  const value=grant.data(), now=new Date().toISOString();
+  const assigned=value?.email===email && value.status==='pending' && value.expiresAt>now;
+  const role=assigned && ['participant','facilitator','admin'].includes(value.role) ? value.role : 'participant';
   const memberData: Member = { id: identity.uid, name: identity.name, avatar: '', role, projectId: null, active: true };
   tx.create(ref, memberData);
   tx.create(c.collection('profiles').doc(identity.uid), memberData);
-  tx.update(inviteRef, { status:'accepted', acceptedBy:identity.uid, acceptedAt:new Date().toISOString() });
+  if(assigned)tx.update(grantRef, {status:'accepted',acceptedBy:identity.uid,acceptedAt:now});
  });
 }
 

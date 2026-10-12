@@ -15,6 +15,6 @@ export async function authenticatedUid(request: Request) {
  if (!header?.startsWith('Bearer ')) return null;
  try {
   const token = await getAuth(firebaseApp()).verifyIdToken(header.slice(7), true);
-  return token.email_verified && token.email ? { uid: token.uid, email: token.email.toLowerCase(), name: token.name || token.email.split('@')[0], avatar: token.picture || '' } : null;
+  return token.firebase.sign_in_provider === 'google.com' && token.email_verified && token.email ? { uid: token.uid, email: token.email.toLowerCase(), name: token.name || token.email.split('@')[0], avatar: token.picture || '' } : null;
  } catch { return null; }
 }

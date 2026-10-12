@@ -5,6 +5,7 @@ test('login initializes Firebase Auth without a component-registration error',as
  await page.goto('/');
  await expect(page.getByRole('button',{name:/Google로 시작하기/})).toBeEnabled();
  await expect(page.getByRole('heading',{name:'반가워요, 메이커!'})).toBeVisible();
+ await expect(page.getByText('처음 로그인하면 참가자로 자동 가입됩니다.',{exact:false})).toBeVisible();
  expect(errors).toEqual([]);
 });
 

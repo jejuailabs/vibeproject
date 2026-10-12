@@ -281,49 +281,9 @@ export function Admin(p: Props) {
               busy={p.busy}
             />
           </Box>
-          <Box title="참가자 초대·권한">
-            <p>
-              초대 이메일을 등록한 뒤 앱 주소를 공유해주세요. 해당 Google
-              계정으로 로그인하면 참여됩니다.
-            </p>
-            <Action
-              label="Google 계정 초대 등록"
-              command={{ type: "invite", days: 30 }}
-              fields={[
-                { name: "email", label: "Google 이메일", type: "email" },
-                {
-                  name: "role",
-                  label: "참여 권한",
-                  type: "select",
-                  value: "participant",
-                  options: choices(["participant", "facilitator", "admin"], {
-                    participant: "참가자",
-                    facilitator: "퍼실리테이터",
-                    admin: "관리자",
-                  }),
-                },
-              ]}
-              run={p.run}
-              busy={p.busy}
-            />
-            {p.invites?.map((i) => (
-              <div className="wk-file-row" key={i.id}>
-                <span>
-                  {i.email}
-                  <small>
-                    {i.role} · {i.status} · {stamp(i.expiresAt)} 만료
-                  </small>
-                </span>
-                {i.status === "pending" && (
-                  <RunButton
-                    p={p}
-                    command={{ type: "revokeInvite", inviteId: i.id }}
-                  >
-                    초대 철회
-                  </RunButton>
-                )}
-              </div>
-            ))}
+          <Box title="참가자 가입·권한">
+            <p>Google 계정으로 로그인하면 참가자로 자동 가입됩니다. 초대 코드나 이메일 사전 등록은 필요하지 않습니다.</p>
+            <p>아래에서 참가자에게 퍼실리테이터·관리자 권한을 부여하거나 참여를 중지할 수 있습니다.</p>
             {w.members.map((m) => (
               <Action
                 key={m.id}
