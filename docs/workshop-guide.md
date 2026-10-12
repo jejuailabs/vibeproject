@@ -69,4 +69,6 @@ AI 어댑터는 기본 비활성이다. Vercel **서버 환경변수**로 아래
 - 보관 기간은 정책 값이다. 자동 일괄 삭제는 실행하지 않는다.
 - 녹취록 텍스트를 받으며 녹음/음성 인식 서비스는 별도 연동 대상이다.
 - preview의 참가자는 가상 인물이다. 역할 전환, 파일, 모든 변경은 브라우저 메모리에서만 유지된다.
-- GitHub 자동 배포 연결의 기존 git_info_fail 제한 때문에 릴리스는 Vercel CLI로 배포한다.
+- 이번 릴리스는 GitHub main의 자동 배포와 Vercel CLI 배포 모두 정상 완료됐다.
+
+개발 검증: npm test, npm run test:e2e. 실제 Firebase 통합 검증은 로컬 개발 서버와 .env.local이 준비된 상태에서 npm run test:integration으로 실행한다. 스크립트는 test-workshop-* 격리 기수와 해당 파일만 만들고 정리한다.
