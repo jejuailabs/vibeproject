@@ -74,3 +74,4 @@ Vercel 런타임의 CommonJS/ESM 호환 문제를 해결하기 위해 Firebase A
 
 개편 후 로컬 검증: TypeScript, 정책/런타임 9개, 브라우저 E2E 6개 통과. Storage 다운로드 URL 32개 확인. 데스크톱/모바일 캐릭터 선택과 취소 및 Firebase 로그인 초기화 검사 포함.
 
+2026-10-13 배포 확인: https://vibeproject-omega.vercel.app 에서 E2E 6개 모두 통과. 배포 ID dpl_rBmXiZygE5iCiQhDLJgaRrYH5p9i, 앱 변경 커밋 aaa4896. 이미지 바이너리 없이 Firebase Storage URL을 사용하는 빌드가 배포되었다.

@@ -30,7 +30,7 @@
 | sidebar | #100D19 | 탐색 배경 |
 | text | #F6F3FF | 본문 |
 | muted | #A29AB8 | 보조 설명 |
-| primary | #A083FF | 주요 행동 |
+| primary | #BEFF8C | 주요 행동 |
 | primary-soft | #342044 | 선택 배경 |
 | border | #FFFFFF12 | 카드 구분 |
 | success | #237A56 | 완료 |
