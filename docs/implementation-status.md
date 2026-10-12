@@ -49,3 +49,6 @@ Next.js 서버 API를 통해 데이터를 읽고 쓰며 클라이언트 Firestor
 배포: https://vibeproject-omega.vercel.app
 샘플 화면: https://vibeproject-omega.vercel.app/preview
 저장소: https://github.com/jejuailabs/vibeproject
+## 배포 런타임 호환성 수정
+
+Vercel 런타임의 CommonJS/ESM 호환 문제를 해결하기 위해 Firebase Admin을 13.10.0으로 고정했다. UUID 11.1.1 및 gRPC 1.13.6 보안 수정 버전을 적용했다. npm audit에서 0건을 확인했으며 require(ESM)이 꺼진 조건의 서버 모듈 로드 회귀 테스트를 추가했다. GitHub와 Vercel의 저장소 연결도 완료했다.
