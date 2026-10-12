@@ -1,4 +1,5 @@
 "use client";
+import { characterFor } from "@/lib/characters";
 import {
   Action,
   Box,
@@ -104,6 +105,7 @@ export function Showcase(p: Props) {
         <div className="wk-grid">
           {showcases.map((s) => (
             <article className="wk-showcase" key={s.id}>
+              <div className="wk-showcase-cover"><span>MADE<br/>IT REAL.</span><img src={characterFor(w.members.find(m => m.id === w.projects.find(t => t.id === s.projectId)?.leaderId)).image} alt="프로젝트 리더의 캐릭터" loading="lazy"/><small>DEMO DAY / WEEK 04</small></div>
               <Badge>
                 {s.data.state === "published" ? "공개 발표" : "팀 초안"}
               </Badge>

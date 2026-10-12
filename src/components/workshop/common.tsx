@@ -64,16 +64,19 @@ export const body: Field = {
 export function Box({
   title,
   eyebrow,
+  className = "",
   children,
 }: {
   title: string;
   eyebrow?: string;
+  className?: string;
   children: ReactNode;
 }) {
+  const headingId = useId();
   return (
-    <section className="wk-box">
+    <section className={"wk-box " + className} aria-labelledby={headingId}>
       {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-      <h2>{title}</h2>
+      <h2 id={headingId}>{title}</h2>
       {children}
     </section>
   );

@@ -45,7 +45,7 @@ export function Studio(p: Props) {
   );
   return (
     <>
-      <Box title="내 개발 환경 준비" eyebrow="READY TO BUILD">
+      <Box title="내 개발 환경 준비" eyebrow="READY TO BUILD" className="wk-readiness-panel">
         <p>설치와 계정 연결을 직접 확인하고 체크해주세요.</p>
         <div className="wk-checklist">
           {readinessItems.map((item) => (
@@ -130,22 +130,25 @@ function ProjectStudio({
     [taskId, setTaskId] = useState(() => uid("task"));
   return (
     <>
-      <Box title="기획을 구현 가능한 문서로" eyebrow="DEFINE → FREEZE → BUILD">
+      <Box title="기획을 구현 가능한 문서로" eyebrow="DEFINE → FREEZE → BUILD" className="wk-document-panel">
         <p>
           AI와 정리한 Markdown을 붙여 넣거나 템플릿을 채워주세요. 7개 문서가
           준비되면 팀장이 버전을 확정합니다.
         </p>
-        <div className="wk-doc-tabs">
+        <div className="wk-document-workspace">
+        <nav className="wk-doc-tabs" aria-label="기획 문서 목록">
           {docKeys.map((k) => (
             <button
               key={k}
+              aria-current={docKey === k ? "page" : undefined}
               className={docKey === k ? "active" : ""}
               onClick={() => setDocKey(k)}
             >
               {docs.some((d) => d.data.key === k) ? "●" : "○"} {docNames[k]}
             </button>
           ))}
-        </div>
+        </nav>
+        <div className="wk-document-editor">
         <Action
           key={docKey}
           label={docNames[docKey] + " · r" + (d?.revision || 0)}
@@ -197,6 +200,7 @@ function ProjectStudio({
               </details>
             ))}
         </details>
+        </div></div>
         <p className="wk-meta">
           {docs.length}/7개 작성 · 이전 확정본은 변경되지 않습니다.
         </p>

@@ -1,4 +1,5 @@
 "use client";
+import { characterFor } from "@/lib/characters";
 import {
   Action,
   Box,
@@ -139,6 +140,12 @@ export function Admin(p: Props) {
         <p>
           팀의 비공개 문서와 대화는 팀장이 지원 권한을 부여한 경우에만 열립니다.
         </p>
+        <div className="wk-operator-lineup" aria-label="참가자 라인업">
+          {w.members.filter(m => m.active).map((m, i) => {
+            const ready = Object.values(recordsOf(p, "readiness").find(r => r.id === "ready-" + m.id)?.data.items || {}).filter(v => v.done).length;
+            return <article key={m.id}><img src={characterFor(m).image} alt={m.name + " 캐릭터"} loading="lazy"/><span className="wk-roster-number">{String(i + 1).padStart(2, "0")}</span><div><strong>{m.name}</strong><small>{w.projects.find(t => t.id === m.projectId)?.name || "프로젝트 탐색 중"}</small>{admin && <><progress max={7} value={ready} aria-label={m.name + " 개발 환경 준비"}/><small>개발 환경 {ready}/7</small></>}</div></article>;
+          })}
+        </div>
         <div className="wk-table-wrap">
           <table>
             <thead>

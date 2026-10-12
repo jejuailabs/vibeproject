@@ -6,14 +6,7 @@ import { Studio } from "./studio";
 import { Sources } from "./sources";
 import { Showcase } from "./showcase";
 import { Admin, Inbox } from "./admin";
-import {
-  Box,
-  Action,
-  recordsOf,
-  reason,
-  scopeOptions,
-  type Props,
-} from "./common";
+import { recordsOf, type Props } from "./common";
 import { Communication } from "./communication";
 const tabs = [
   ["activities", "현장 활동", "01"],
@@ -25,7 +18,7 @@ const tabs = [
   ["inbox", "알림·도움", "07"],
   ["admin", "기수 운영", "08"],
 ] as const;
-export function WorkshopHub(p: Props) {
+export function WorkshopHub(p: Props & { requestedTab?: { id: string; revision: number } }) {
   const [tab, setTab] = useState("activities");
   useEffect(() => {
     const t = new URLSearchParams(location.search).get("tab");
@@ -42,9 +35,18 @@ export function WorkshopHub(p: Props) {
       return () => clearTimeout(t);
     }
   }, [p.records, tab]);
+  useEffect(() => {
+    if (!p.requestedTab) return;
+    setTab(p.requestedTab.id);
+    const u = new URL(location.href);
+    u.searchParams.set("view", "workshop");
+    u.searchParams.set("tab", p.requestedTab.id);
+    u.searchParams.delete("item");
+    history.replaceState(null, "", u);
+  }, [p.requestedTab]);
   const notice = recordsOf(p, "settings")[0]?.data.notice;
   return (
-    <div className="workshop-hub">
+    <div className="workshop-hub" data-screen={tab}>
       {notice && <p className="wk-announcement">{notice}</p>}
       <nav className="wk-tabs" aria-label="워크숍 기능">
         {tabs
@@ -54,6 +56,7 @@ export function WorkshopHub(p: Props) {
           .map(([id, label, num]) => (
             <button
               key={id}
+              aria-current={tab === id ? "page" : undefined}
               className={tab === id ? "active" : ""}
               onClick={() => {
                 setTab(id);
@@ -71,6 +74,7 @@ export function WorkshopHub(p: Props) {
             </button>
           ))}
       </nav>
+      <div className="wk-screen-content">
       {tab === "activities" && <Activities {...p} />}
       {tab === "votes" && <Votes {...p} />}
       {tab === "studio" && <Studio {...p} />}
@@ -79,6 +83,7 @@ export function WorkshopHub(p: Props) {
       {tab === "showcase" && <Showcase {...p} />}
       {tab === "inbox" && <Inbox {...p} />}
       {tab === "admin" && <Admin {...p} />}
+      </div>
     </div>
   );
 }

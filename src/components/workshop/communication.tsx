@@ -1,4 +1,5 @@
 "use client";
+import { characterFor } from "@/lib/characters";
 import { useState } from "react";
 import {
   Action,
@@ -59,7 +60,8 @@ export function Communication(p: Props) {
             key={m.id}
             id={m.id}
           >
-            <div className="wk-meta">
+            <div className="wk-meta wk-thread-author">
+              <img src={characterFor(w.members.find(x => x.id === m.authorId)).thumbnail} alt="" loading="lazy"/>
               <strong>
                 {w.members.find((x) => x.id === m.authorId)?.name}
               </strong>
