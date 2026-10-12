@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+dist/
+.env*
+!.env.example
+.vercel/
+*.tsbuildinfo
+*.log
+coverage/
+*firebase-adminsdk*.json
+*service-account*.json
+work/
+
+.vercel

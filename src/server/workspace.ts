@@ -1,0 +1,161 @@
+import 'server-only';
+import { createHash, randomUUID } from 'node:crypto';
+import { db } from './firebase';
+import { DomainError, assertAdmin, assertCanRead, assertChannel, assertEditable, assertRevision, canReadIdea, validateSelection } from '@/lib/policy';
+import type { Activity, Command, Comment, HistoryEvent, Idea, Member, Message, Project, Workspace } from '@/lib/types';
+import { z } from 'zod';
+
+const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
+const short = z.string().trim().min(1).max(120);
+const body = z.string().trim().min(1).max(5000);
+const commandSchema = z.discriminatedUnion('type', [
+ z.object({ type: z.literal('createIdea'), title: short, body, kind: z.enum(['thought','question','progress']), scope: z.enum(['owner','project','cohort']) }),
+ z.object({ type: z.literal('editIdea'), id, revision: z.number().int().nonnegative(), title: short, body, reason: short }),
+ z.object({ type: z.literal('comment'), ideaId: id, body }),
+ z.object({ type: z.literal('sendMessage'), channel: id, body: body.max(2000) }),
+ z.object({ type: z.literal('selectIdea'), ideaId: id, revision: z.number().int().nonnegative(), projectName: short, reason: short }),
+ z.object({ type: z.literal('closeIdea'), ideaId: id, revision: z.number().int().nonnegative(), reason: short }),
+ z.object({ type: z.literal('setActivity'), state: z.enum(['open','closed']) }),
+]);
+export const envelopeSchema = z.object({ cohortId: id, requestId: z.string().uuid(), command: commandSchema });
+export function cohortRef(cohortId: string) { return db().collection('cohorts').doc(id.parse(cohortId)); }
+
+async function getMember(c: ReturnType<typeof cohortRef>, uid: string) {
+ const snapshot = await c.collection('members').doc(uid).get();
+ if (!snapshot.exists || snapshot.data()?.active !== true) throw new DomainError('NOT_ENROLLED', '기수 초대가 필요합니다. 관리자에게 참여 등록을 요청해주세요.', 403);
+ return { ...snapshot.data(), id: uid } as Member;
+}
+
+export async function enroll(cohortId: string, identity: {uid:string;email:string;name:string;avatar:string}) {
+ const c = cohortRef(cohortId);
+ const key = createHash('sha256').update(identity.email).digest('hex');
+ await db().runTransaction(async tx => {
+  const ref = c.collection('members').doc(identity.uid);
+  const inviteRef = c.collection('invites').doc(key);
+  const [member, invite, cohort] = await Promise.all([tx.get(ref), tx.get(inviteRef), tx.get(c)]);
+  if (!cohort.exists) throw new DomainError('NOT_READY', '기수 설정이 아직 완료되지 않았습니다.', 503);
+  if (member.exists) {
+   if (!member.data()?.active) throw new DomainError('FORBIDDEN', '참여 권한이 중지되었습니다.', 403);
+   return;
+  }
+  const value = invite.data();
+  if (!value || value.email !== identity.email || value.status !== 'pending' || value.expiresAt <= new Date().toISOString())
+   throw new DomainError('NOT_INVITED', '등록된 초대가 없습니다. 관리자에게 Google 이메일을 알려주세요.', 403);
+  const role = ['participant','facilitator','admin'].includes(value.role) ? value.role : 'participant';
+  const memberData: Member = { id: identity.uid, name: identity.name, avatar: '', role, projectId: null, active: true };
+  tx.create(ref, memberData);
+  tx.create(c.collection('profiles').doc(identity.uid), memberData);
+  tx.update(inviteRef, { status:'accepted', acceptedBy:identity.uid, acceptedAt:new Date().toISOString() });
+ });
+}
+
+export async function getWorkspace(cohortId: string, uid: string): Promise<Workspace> {
+ const c = cohortRef(cohortId), me = await getMember(c,uid);
+ const queries = [c.collection('ideas').where('scope','==','cohort').limit(100).get(), c.collection('ideas').where('ownerId','==',uid).limit(100).get()];
+ if (me.projectId) queries.push(c.collection('ideas').where('projectId','==',me.projectId).where('scope','==','project').limit(100).get());
+ const [cohort, profiles, directory, activity, ...ideaSets] = await Promise.all([
+  c.get(), c.collection('profiles').limit(200).get(), c.collection('projectDirectory').limit(100).get(),
+  c.collection('activities').doc('discovery').get(), ...queries
+ ]);
+ const map = new Map<string,Idea>();
+ for (const set of ideaSets) for (const d of set.docs) { const idea = {...d.data(),id:d.id} as Idea; if (canReadIdea(me,idea)) map.set(d.id,idea); }
+ const ideas = [...map.values()].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)).slice(0,100);
+ const comments: Comment[] = [], events: HistoryEvent[] = [];
+ await Promise.all(ideas.slice(0,30).map(async idea => {
+  const [cs,vs] = await Promise.all([c.collection('ideas').doc(idea.id).collection('comments').orderBy('createdAt','desc').limit(50).get(),
+   c.collection('ideas').doc(idea.id).collection('history').orderBy('createdAt','desc').limit(20).get()]);
+  for (const d of cs.docs) comments.push({...d.data(),id:d.id} as Comment);
+  for (const d of vs.docs) events.push({...d.data(),id:d.id} as HistoryEvent);
+ }));
+ const messages: Message[] = [];
+ await Promise.all(['cohort', ...(me.projectId ? [me.projectId] : [])].map(async channel => {
+  const ms = await c.collection('channels').doc(channel).collection('messages').orderBy('createdAt','desc').limit(50).get();
+  for(const d of ms.docs) messages.push({...d.data(),id:d.id} as Message);
+ }));
+ return {
+  cohort:{ id:cohortId, name:cohort.data()?.name || '바이브코딩 워크숍', week:cohort.data()?.week || 1 },
+  me, members:profiles.docs.filter(d=>d.data().active).map(d=>({...d.data(),id:d.id} as Member)), ideas,
+  comments:comments.sort((a,b)=>a.createdAt.localeCompare(b.createdAt)),
+  projects:directory.docs.map(d=>({...d.data(),id:d.id} as Project)),
+  activity:activity.exists ? {...activity.data(),id:activity.id} as Activity : {id:'discovery',title:'문제 발견',question:'어떤 불편을 해결하고 싶나요?',description:'일상에서 느낀 작은 불편을 꺼내보세요.',state:'closed',week:1},
+  messages:messages.sort((a,b)=>a.createdAt.localeCompare(b.createdAt)),
+  events:events.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)),
+ };
+}
+
+export async function runCommand(cohortId: string, uid: string, requestId: string, raw: Command) {
+ const command = commandSchema.parse(raw);
+ const c=cohortRef(cohortId), now=new Date().toISOString();
+ const hash=createHash('sha256').update(JSON.stringify(command)).digest('hex');
+ const replayRef=c.collection('idempotency').doc(uid+'_'+requestId);
+ return db().runTransaction(async tx => {
+  const memberRef=c.collection('members').doc(uid);
+  const [memberSnap,replay]=await Promise.all([tx.get(memberRef),tx.get(replayRef)]);
+  if(!memberSnap.exists || memberSnap.data()?.active!==true) throw new DomainError('FORBIDDEN','기수 참여 권한이 필요합니다.',403);
+  const me={...memberSnap.data(),id:uid} as Member;
+  if(replay.exists) {
+   if(replay.data()?.hash!==hash) throw new DomainError('CONFLICT','요청 식별자가 다른 작업에 사용되었습니다.',409);
+   return replay.data()?.result;
+  }
+  let result:{id:string}={id:requestId};
+  const history=(idea:Idea,title:string,reason:string) => {
+   const ref=c.collection('ideas').doc(idea.id).collection('history').doc();
+   tx.create(ref,{id:ref.id,ideaId:idea.id,title,reason,actorId:uid,createdAt:now,revision:idea.revision,
+    snapshot:{title:idea.title,body:idea.body,scope:idea.scope,state:idea.state}});
+  };
+  if(command.type==='createIdea') {
+   if(command.scope==='project' && !me.projectId) throw new DomainError('NO_PROJECT','먼저 프로젝트에 참여해주세요.',409);
+   if(command.scope!=='owner') {
+    const activity=await tx.get(c.collection('activities').doc('discovery'));
+    if(activity.data()?.state!=='open') throw new DomainError('CLOSED','현재 활동이 마감되었습니다. 나만 보기로 저장할 수 있습니다.',409);
+   }
+   const ref=c.collection('ideas').doc();
+   const idea:Idea={id:ref.id,title:command.title,body:command.body,kind:command.kind,ownerId:uid,scope:command.scope,projectId:command.scope==='project'?me.projectId:null,state:'shared',revision:1,version:1,createdAt:now,updatedAt:now};
+   tx.create(ref,idea); history(idea,command.scope==='owner'?'첫 생각 저장':'첫 생각 공유','최초 작성'); result={id:ref.id};
+  } else if(command.type==='sendMessage') {
+   assertChannel(me,command.channel);
+   const rateRef=c.collection('messageRates').doc(uid);
+   const rate=await tx.get(rateRef);
+   if(rate.exists && Date.now()-Date.parse(rate.data()?.sentAt)<1000) throw new DomainError('RATE_LIMITED','잠시 후 메시지를 보내주세요.',429);
+   const ref=c.collection('channels').doc(command.channel).collection('messages').doc();
+   tx.create(ref,{id:ref.id,authorId:uid,body:command.body,channel:command.channel,createdAt:now});
+   tx.set(rateRef,{sentAt:now}); result={id:ref.id};
+  } else if(command.type==='setActivity') {
+   if(me.role!=='admin' && me.role!=='facilitator') throw new DomainError('FORBIDDEN','운영 권한이 필요합니다.',403);
+   const ref=c.collection('activities').doc('discovery'); await tx.get(ref);
+   tx.update(ref,{state:command.state,updatedAt:now,updatedBy:uid});
+  } else {
+   const ideaId=command.type==='editIdea'?command.id:command.ideaId;
+   const ref=c.collection('ideas').doc(ideaId), snap=await tx.get(ref);
+   if(!snap.exists) throw new DomainError('NOT_FOUND','아이디어를 찾을 수 없습니다.',404);
+   const idea={...snap.data(),id:ideaId} as Idea; assertCanRead(me,idea);
+   if(command.type==='comment') {
+    if(idea.state==='closed_unselected') throw new DomainError('LOCKED','종료된 아이디어는 읽기 전용입니다.',409);
+    const comment=ref.collection('comments').doc();
+    tx.create(comment,{id:comment.id,ideaId,authorId:uid,body:command.body,createdAt:now});result={id:comment.id};
+   } else if(command.type==='editIdea') {
+    assertEditable(me,idea,command.revision);
+    const next={...idea,title:command.title,body:command.body,revision:idea.revision+1,version:idea.version+1,updatedAt:now};
+    tx.update(ref,next);history(next,'생각을 구체화했어요',command.reason);result={id:ideaId};
+   } else if(command.type==='closeIdea') {
+    assertAdmin(me);assertRevision(idea,command.revision);
+    if(idea.scope!=='cohort'||idea.state!=='shared') throw new DomainError('INVALID_STATE','공유 중인 후보만 종료할 수 있습니다.',409);
+    const next={...idea,state:'closed_unselected' as const,revision:idea.revision+1,updatedAt:now};
+    tx.update(ref,next);history(next,'아이디어 종료',command.reason);result={id:ideaId};
+   } else {
+    const ownerRef=c.collection('members').doc(idea.ownerId), ownerSnap=await tx.get(ownerRef);
+    if(!ownerSnap.exists || !ownerSnap.data()?.active) throw new DomainError('INVALID_OWNER','제안자의 참여 상태를 확인해주세요.',409);
+    const owner={...ownerSnap.data(),id:idea.ownerId} as Member;
+    validateSelection(me,idea,command.revision,owner);
+    const projectRef=c.collection('projects').doc();
+    const project:Project={id:projectRef.id,name:command.projectName,problem:idea.title,leaderId:owner.id,memberIds:[owner.id],sourceIdeaId:idea.id,stage:'기획 중',createdAt:now};
+    tx.create(projectRef,project);tx.create(c.collection('projectDirectory').doc(projectRef.id),project);
+    tx.create(projectRef.collection('members').doc(owner.id),{role:'leader',status:'active',acceptedAt:now});
+    tx.update(ownerRef,{projectId:projectRef.id});tx.update(c.collection('profiles').doc(owner.id),{projectId:projectRef.id});
+    const next={...idea,state:'selected' as const,revision:idea.revision+1,updatedAt:now};
+    tx.update(ref,next);history(next,'프로젝트로 선정되었어요',command.reason);result={id:projectRef.id};
+   }
+  }
+  tx.create(replayRef,{hash,result,createdAt:now});return result;
+ });
+}

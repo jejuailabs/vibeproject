@@ -1,0 +1,56 @@
+import {test,expect} from '@playwright/test';
+test('idea, comment and revision remain connected',async({page})=>{
+ await page.goto('/preview');
+ await expect(page.getByText('샘플 미리보기 · 가상 참가자',{exact:false})).toBeVisible();
+ await page.getByRole('button',{name:'생각 남기기',exact:true}).first().click();
+ let dialog=page.getByRole('dialog');
+ await dialog.getByLabel('한 문장으로 표현하면').fill('처음 방문하는 사람을 위한 안내');
+ await dialog.getByLabel('조금 더 들려주세요').fill('어디서 시작해야 할지 어려운 사람에게 첫 행동을 알려주고 싶어요.');
+ await dialog.getByLabel('누구와 나눌까요?').selectOption('cohort');
+ await dialog.getByRole('button',{name:'생각 남기기',exact:true}).click();
+ await page.getByRole('button',{name:/처음 방문하는 사람을 위한 안내/}).click();
+ dialog=page.getByRole('dialog');
+ await dialog.getByLabel('의견 남기기',{exact:true}).fill('첫 화면에 한 가지 행동만 보여주면 어떨까요?');
+ await dialog.getByRole('button',{name:'의견 남기기',exact:true}).click();
+ await expect(dialog.getByText('첫 화면에 한 가지 행동만 보여주면 어떨까요?')).toBeVisible();
+ await dialog.getByRole('button',{name:'생각 다듬기'}).click();
+ dialog=page.getByRole('dialog');
+ await dialog.getByLabel('한 문장으로 표현하면').fill('첫 행동 하나를 안내하는 서비스');
+ await dialog.getByLabel('무엇 때문에 생각이 바뀌었나요?').fill('동료의 의견을 반영해 범위를 좁힘');
+ await dialog.getByRole('button',{name:'변경 기록하기'}).click();
+ await page.getByRole('button',{name:'성장 이력',exact:true}).click();
+ await expect(page.getByText('동료의 의견을 반영해 범위를 좁힘',{exact:true})).toBeVisible();
+ await expect(page.getByText('처음 방문하는 사람을 위한 안내',{exact:true})).toBeVisible();
+});
+test('selection produces a project linked to its original idea',async({page})=>{
+ await page.goto('/preview');
+ await page.getByRole('button',{name:/처음 온 사람도 편안한 커뮤니티를 만들고 싶어요/}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'프로젝트로 선정'}).click();
+ const dialog=page.getByRole('dialog');
+ await dialog.getByLabel('프로젝트 이름').fill('환영의 첫걸음');
+ await dialog.getByLabel('이유를 기록해주세요').fill('첫 참여자의 불편이 명확함');
+ await dialog.getByRole('button',{name:'확정하기'}).click();
+ await page.getByRole('button',{name:'프로젝트',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'환영의 첫걸음'})).toBeVisible();
+ await page.getByRole('button',{name:'성장 이력',exact:true}).click();
+ await expect(page.getByText('첫 참여자의 불편이 명확함')).toBeVisible();
+});
+test('chat messages work and mobile layout fits',async({page})=>{
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/preview');
+ await expect(page.getByRole('heading',{name:'김민지님의 작업 공간'})).toBeVisible();
+ const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth);
+ expect(overflow).toBe(false);
+ await page.getByRole('button',{name:'채팅 열기 또는 닫기'}).click();
+ await page.getByLabel('메시지',{exact:true}).fill('오늘 나눈 생각을 기록해두었어요.');
+ await page.getByRole('button',{name:'메시지 보내기'}).click();
+ await expect(page.getByText('오늘 나눈 생각을 기록해두었어요.')).toBeVisible();
+ await page.getByRole('button',{name:'채팅 닫기',exact:true}).click();
+ await page.screenshot({path:'work/mobile-preview.png',fullPage:true});
+});
+test('unauthenticated API is closed and desktop renders',async({page,request})=>{
+ expect((await request.get('/api/workspace?cohortId=vibe-2026-01')).status()).toBe(401);
+ expect((await request.post('/api/workspace',{data:{}})).status()).toBe(401);
+ await page.goto('/preview');
+ await page.screenshot({path:'work/desktop-preview.png',fullPage:true});
+});

@@ -1,0 +1,13 @@
+import {applicationDefault} from 'firebase-admin/app';
+const domains=process.argv.slice(2);
+if(!domains.length||domains.some(d=>!d.endsWith('.vercel.app')||d.includes('/')))throw new Error('Pass explicit Vercel hostnames only');
+const {access_token}=await applicationDefault().getAccessToken();
+const url='https://identitytoolkit.googleapis.com/admin/v2/projects/'+process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID+'/config';
+const headers={Authorization:'Bearer '+access_token,'Content-Type':'application/json'};
+const response=await fetch(url,{headers});if(!response.ok)throw new Error('Cannot read auth configuration');
+const current=await response.json();
+const authorizedDomains=[...new Set([...(current.authorizedDomains||[]),...domains])];
+const changed=await fetch(url+'?updateMask=authorizedDomains',{method:'PATCH',headers,body:JSON.stringify({authorizedDomains})});
+if(!changed.ok)throw new Error('Could not update authorized domains: '+changed.status);
+const result=await changed.json();
+console.log(JSON.stringify({googleLoginDomains:result.authorizedDomains}));

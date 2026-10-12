@@ -1,0 +1,9 @@
+// LOCAL REFERENCE ONLY. Do not deploy over the shared smoke-529c6 rules.
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  // Initial release uses authenticated server routes exclusively.
+  // Every Admin SDK operation must enforce the current cohort/project membership.
+  match /{document=**} { allow read, write: if false; }
+ }
+}
