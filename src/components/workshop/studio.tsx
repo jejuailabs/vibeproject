@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   docKeys,
   docNames,
@@ -26,7 +26,7 @@ import {
   uid,
   type Props,
 } from "./common";
-export function Studio(p: Props) {
+export function Studio(p: Props & {requestedDocKey?: DocKey}) {
   const w = p.workspace,
     allowed = w.projects.filter(
       (t) =>
@@ -37,7 +37,8 @@ export function Studio(p: Props) {
         ),
     );
   const [selected, setSelected] = useState(""),
-    [docKey, setDocKey] = useState<DocKey>("product");
+    [docKey, setDocKey] = useState<DocKey>(p.requestedDocKey || "product");
+  useEffect(()=>{if(p.requestedDocKey)setDocKey(p.requestedDocKey);},[p.requestedDocKey]);
   const team = allowed.find((t) => t.id === selected) || allowed[0],
     leader = team?.leaderId === w.me.id;
   const personal = recordsOf(p, "readiness").find(
@@ -45,7 +46,7 @@ export function Studio(p: Props) {
   );
   return (
     <>
-      <Box title="내 개발 환경 준비" eyebrow="READY TO BUILD" className="wk-readiness-panel">
+      <Box id="personal-readiness" title="내 개발 환경 준비" eyebrow="READY TO BUILD" className="wk-readiness-panel">
         <p>설치와 계정 연결을 직접 확인하고 체크해주세요.</p>
         <div className="wk-checklist">
           {readinessItems.map((item) => (
@@ -130,7 +131,7 @@ function ProjectStudio({
     [taskId, setTaskId] = useState(() => uid("task"));
   return (
     <>
-      <Box title="기획을 구현 가능한 문서로" eyebrow="DEFINE → FREEZE → BUILD" className="wk-document-panel">
+      <Box id="project-docs" title="기획을 구현 가능한 문서로" eyebrow="DEFINE → FREEZE → BUILD" className="wk-document-panel">
         <p>
           AI와 정리한 Markdown을 붙여 넣거나 템플릿을 채워주세요. 7개 문서가
           준비되면 팀장이 버전을 확정합니다.
@@ -206,7 +207,7 @@ function ProjectStudio({
         </p>
         {leader && (
           <Action
-            label="7개 문서 버전 확정"
+            id="project-baseline" label="7개 문서 버전 확정"
             command={{
               type: "baseline",
               projectId,
@@ -542,11 +543,11 @@ function ProjectStudio({
             </div>
           ))}
       </Box>
-      <Box title="배포 버전 등록">
+      <Box id="project-releases" title="배포 버전 등록">
         <p>시연할 배포 주소와 그때의 기획 기준을 연결합니다.</p>
         {leader && (
           <Action
-            label="새 배포 등록"
+            id="project-release" label="새 배포 등록"
             command={{ type: "release", projectId }}
             fields={[
               title,

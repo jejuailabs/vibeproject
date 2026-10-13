@@ -6,6 +6,7 @@ import { Studio } from "./studio";
 import { Sources } from "./sources";
 import { Showcase } from "./showcase";
 import { Admin, Inbox } from "./admin";
+import type {DocKey} from "@/lib/workshop/model";
 import { recordsOf, type Props } from "./common";
 import { Communication } from "./communication";
 const tabs = [
@@ -18,7 +19,7 @@ const tabs = [
   ["inbox", "알림·도움", "07"],
   ["admin", "기수 운영", "08"],
 ] as const;
-export function WorkshopHub(p: Props & { requestedTab?: { id: string; revision: number } }) {
+export function WorkshopHub(p: Props & { requestedTab?: { id: string; revision: number; docKey?: DocKey; target?: string } }) {
   const [tab, setTab] = useState("activities");
   useEffect(() => {
     const t = new URLSearchParams(location.search).get("tab");
@@ -44,6 +45,17 @@ export function WorkshopHub(p: Props & { requestedTab?: { id: string; revision: 
     u.searchParams.delete("item");
     history.replaceState(null, "", u);
   }, [p.requestedTab]);
+  useEffect(() => {
+    if (!p.requestedTab?.target || tab !== p.requestedTab.id) return;
+    const target = p.requestedTab.target;
+    const frame = requestAnimationFrame(() => {
+      const element = document.getElementById(target);
+      if (element instanceof HTMLDetailsElement) element.open = true;
+      element?.scrollIntoView({ block: "start" });
+      element?.querySelector<HTMLElement>("input, textarea, select")?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [p.requestedTab, tab]);
   const notice = recordsOf(p, "settings")[0]?.data.notice;
   return (
     <div className="workshop-hub" data-screen={tab}>
@@ -77,7 +89,7 @@ export function WorkshopHub(p: Props & { requestedTab?: { id: string; revision: 
       <div className="wk-screen-content">
       {tab === "activities" && <Activities {...p} />}
       {tab === "votes" && <Votes {...p} />}
-      {tab === "studio" && <Studio {...p} />}
+      {tab === "studio" && <Studio {...p} requestedDocKey={p.requestedTab?.docKey} />}
       {tab === "sources" && <Sources {...p} />}
       {tab === "communication" && <Communication {...p} />}
       {tab === "showcase" && <Showcase {...p} />}

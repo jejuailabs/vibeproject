@@ -3,6 +3,8 @@ import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signOut,type User} from 'firebase/auth';
 import {ArrowUpRight,ArrowRight,ArrowLeft,LayoutDashboard,Lightbulb,Users,MessageCircle,Clock3,Plus,Send,ChevronDown,Check,Lock,Globe2,Leaf,LogOut,X,Menu,RefreshCw,LoaderCircle,Pencil,Archive,GitBranch,Play,Pause,Search,Sparkles,CheckCircle2} from 'lucide-react';
 import {clientAuth,firebaseConfigured} from '@/lib/firebase-client';
+import {JourneyBoard} from './journey-board';
+import type {DocKey} from '@/lib/workshop/model';
 import {WorkshopHub} from './workshop/hub';
 import {ArenaProfile} from './arena-profile';
 import {useWorkshop} from './workshop/use-workshop';
@@ -30,7 +32,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  const [user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(!preview),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [characterOpen,setCharacterOpen]=useState(false);
  const [memberFilter,setMemberFilter]=useState<string|null>(null);
- const [workshopTab,setWorkshopTab]=useState<{id:string;revision:number}|undefined>();
+ const [workshopTab,setWorkshopTab]=useState<{id:string;revision:number;docKey?:DocKey;target?:string}|undefined>();
  const [space,setSpace]=useState<Space>('me'),[view,setView]=useState<View>('dashboard'),[query,setQuery]=useState(''),[filter,setFilter]=useState('all');
  const [chatOpen,setChatOpen]=useState(true),[mobileNav,setMobileNav]=useState(false),[channel,setChannel]=useState('cohort'),[chatText,setChatText]=useState('');
  const [composer,setComposer]=useState(false),[editing,setEditing]=useState<Idea|null>(null),[selected,setSelected]=useState<string|null>(null),[action,setAction]=useState<{idea:Idea;type:'select'|'close'}|null>(null);
@@ -101,7 +103,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  }
  function openComposer(idea?:Idea){setEditing(idea||null);setTitle(idea?.title||'');setBody(idea?.body||'');setReason('');setKind(idea?.kind||'thought');setScope(idea?.scope||(space==='project'?'project':space==='me'?'owner':'cohort'));setComposer(true);}
  async function submitIdea(e:FormEvent){e.preventDefault();const command:Command=editing?{type:'editIdea',id:editing.id,revision:editing.revision,title,body,reason}:{type:'createIdea',title,body,kind,scope};if(await run(command))setComposer(false);}
- function navigate(next:View){extraPages.current=[];setPageCursors({});setView(next);setMobileNav(false);setQuery('');setMemberFilter(null);}
+ function navigate(next:View){if(next!=='workshop'){setWorkshopTab(undefined);const url=new URL(location.href);url.searchParams.delete('view');url.searchParams.delete('tab');url.searchParams.delete('item');history.replaceState(null,'',url);}extraPages.current=[];setPageCursors({});setView(next);setMobileNav(false);setQuery('');setMemberFilter(null);}
  if(!data)return <Login loading={loading} error={error} onLogin={login}/>;
  const me=data.me, project=data.projects.find(p=>p.id===me.projectId);
  const findMember=(uid:string)=>data.members.find(m=>m.id===uid);
@@ -130,17 +132,16 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  <main className="main-content">
  {error&&<div className="error-banner" role="alert">{error}<button aria-label="오류 닫기" onClick={()=>setError('')}><X size={16}/></button></div>}
  <div className="page-heading"><div><span className="eyebrow">{view==='workshop'?'YOUR WORKSHOP / IN PLAY':view==='dashboard'?'MAKE SOMETHING MEANINGFUL':view==='ideas'?'IDEAS GROW TOGETHER':view==='projects'?'BETTER, TOGETHER':'EVERY STEP MATTERS'}</span><h1>{view==='workshop'?'워크숍 플레이북':view==='dashboard'?(space==='me'?me.name.split(' ')[0]+'님의 작업 공간':space==='project'?'우리의 프로젝트':'함께 만드는 가능성'):view==='ideas'?'아이디어 보드':view==='projects'?'프로젝트 둘러보기':'생각이 자라온 기록'}</h1><p>{view==='workshop'?'현장 활동부터 팀 구성, 개발과 발표까지 한 공간에서 진행하세요.':view==='dashboard'?'오늘의 작은 생각을, 다음 가능성으로 연결해보세요.':view==='ideas'?'서로의 시선이 더해지면, 작은 생각도 달라집니다.':view==='projects'?'서로 다른 생각이 모여 하나의 변화를 만듭니다.':'첫 생각부터 지금까지, 우리의 변화가 남아 있어요.'}</p></div><button className="primary-button" onClick={()=>openComposer()}><Plus size={17}/>생각 남기기</button></div>
- <ArenaProfile workspace={data} records={workshop.records} space={space} compact={view!=='dashboard'} onCharacter={()=>{setError('');setCharacterOpen(true);}} onIdeas={()=>navigate('ideas')} onStage={tab=>{setWorkshopTab({id:tab,revision:Date.now()});navigate('workshop');}}/>
+ {view==='dashboard'&&<JourneyBoard key={me.id} workspace={data} {...workshop} busy={busy||workshop.busy} preview={preview} scope={space} saveIdea={run} onIdea={id=>{setSelected(id);setComment('');}} onNavigate={(tab,docKey,target)=>{setWorkshopTab({id:tab,docKey,target,revision:Date.now()});navigate('workshop');if(!target)window.scrollTo({top:0});}}/>}
+ {view==='workshop'&&<button className="journey-back" onClick={()=>navigate('dashboard')}><ArrowLeft size={17}/> 어디서부터 시작할까요? 단계별 활동 보드로</button>}
+ <ArenaProfile workspace={data} records={workshop.records} space={space} compact onCharacter={()=>{setError('');setCharacterOpen(true);}} onIdeas={()=>navigate('ideas')} onStage={tab=>{setWorkshopTab({id:tab,revision:Date.now()});navigate('workshop');}}/>
  {view==='workshop'&&<WorkshopHub workspace={data} {...workshop} preview={preview} requestedTab={workshopTab}/>}
  {view==='dashboard'&&<>
-
- <div className="arena-workspace-bar"><span><i/>WEEK {String(data.cohort.week).padStart(2,'0')} · {data.activity.state==='open'?'활동 진행 중':'다음 활동 준비'}</span><button onClick={()=>navigate('workshop')}>워크숍 이어서 진행하기 <ArrowUpRight size={16}/></button></div>
- <section className="activity-card"><div className="activity-icon"><Lightbulb size={24}/></div><div><span className="mini-label">{data.activity.state==='open'?'지금 함께하는 활동':'마감된 활동'}</span><h3>{data.activity.title}</h3><p>{data.activity.question}</p></div><div className="activity-actions"><button className="text-button" onClick={()=>{setScope('cohort');setEditing(null);setTitle('');setBody('');setComposer(true);}} disabled={data.activity.state==='closed'}>생각 나누기 <ArrowRight size={16}/></button>{(me.role==='admin'||me.role==='facilitator')&&<button className="quiet-button" disabled={busy} onClick={()=>run({type:'setActivity',state:data.activity.state==='open'?'closed':'open'})}>{data.activity.state==='open'?<Pause size={12}/>:<Play size={12}/>}활동 {data.activity.state==='open'?'마감':'열기'}</button>}</div></section>
 
  <section className="people-section"><div className="section-title"><div><span className="eyebrow">THE LINEUP</span><h2>{space==='project'?'우리 팀 메이커':'함께하는 메이커'}</h2></div><span>{space==='project'&&!project?0:teamMembers.length}명 · 함께 만드는 중</span></div>{space==='project'&&!project?<div className="empty-card">아직 참여한 프로젝트가 없어요. 아이디어를 나누며 함께할 문제를 찾아보세요.</div>:<div className="people-grid">{teamMembers.map((m,i)=><button className={'person-card tone-'+['violet','coral','mint','blue'][i%4]} key={m.id} onClick={()=>{setSpace('cohort');navigate('ideas');setMemberFilter(m.id);setFilter('all');}} aria-label={m.name+'의 생각 보기'}><span className="person-number">{String(i+1).padStart(2,'0')}</span><span className="person-role">{m.role==='admin'||m.role==='facilitator'?'FACILITATOR':data.projects.some(p=>p.leaderId===m.id)?'TEAM LEADER':'MAKER'}</span><Avatar member={m} large/><div className="person-info"><strong>{m.name}<ArrowUpRight size={17}/></strong><small>{data.projects.find(p=>p.id===m.projectId)?.name||'가능성을 발견하는 중'}</small><span className="person-stat"><Lightbulb size={12}/>{data.ideas.filter(i=>i.ownerId===m.id).length}개의 생각<span>VIEW IDEAS</span></span></div></button>)}</div>}<p className="portrait-note">캐릭터는 참가자를 표현하는 AI 일러스트입니다.</p></section>
 
  </>}
- {(view==='dashboard'||view==='ideas')&&<>
+ {view==='ideas'&&<>
  <div className="section-title feed-heading"><h2>{view==='ideas'?'모든 아이디어':space==='me'?'나의 생각과 이야기':'우리의 생각과 이야기'}</h2><label className="search-field"><Search size={15}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="생각 검색" aria-label="아이디어 검색"/></label></div>
  {memberFilter&&<div className="member-filter"><span>{findMember(memberFilter)?.name}님의 생각</span><button onClick={()=>setMemberFilter(null)}>전체 보기 <X size={13}/></button></div>}
  <div className="feed-tabs">{[['all','전체'],['thought','생각'],['question','질문'],['progress','진행 공유'],['closed','종료 보관']].map(([id,label])=><button key={id} className={filter===id?'active':''} onClick={()=>setFilter(id)}>{label}</button>)}</div>

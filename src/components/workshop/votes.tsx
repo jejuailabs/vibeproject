@@ -22,7 +22,7 @@ export function Votes(p: Props) {
   );
   return (
     <>
-      <Box title="어떤 문제에 함께 도전할까요?" eyebrow="VOTE & FORM A SQUAD">
+      <Box id="vote-rounds" title="어떤 문제에 함께 도전할까요?" eyebrow="VOTE & FORM A SQUAD">
         <p>
           후보는 투표 시작 시점의 내용으로 고정됩니다. 투표는 비공개로 저장하고,
           마감 후 후보별 합계를 공개합니다.
@@ -214,7 +214,7 @@ export function Votes(p: Props) {
           />
         </Box>
       )}
-      <Box title="프로젝트에 합류하기">
+      <Box id="project-join" title="프로젝트에 합류하기">
         <div className="wk-grid">
           {w.projects.map((team) => {
             const leader = team.leaderId === w.me.id,

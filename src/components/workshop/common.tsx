@@ -62,11 +62,13 @@ export const body: Field = {
   max: 20000,
 };
 export function Box({
+  id,
   title,
   eyebrow,
   className = "",
   children,
 }: {
+  id?: string;
   title: string;
   eyebrow?: string;
   className?: string;
@@ -74,7 +76,7 @@ export function Box({
 }) {
   const headingId = useId();
   return (
-    <section className={"wk-box " + className} aria-labelledby={headingId}>
+    <section id={id} className={"wk-box " + className} aria-labelledby={headingId}>
       {eyebrow && <span className="eyebrow">{eyebrow}</span>}
       <h2 id={headingId}>{title}</h2>
       {children}
@@ -88,6 +90,7 @@ export function Badge({ children }: { children: ReactNode }) {
   return <span className="wk-badge">{children}</span>;
 }
 export function Action({
+  id,
   label,
   fields = [],
   command,
@@ -97,6 +100,7 @@ export function Action({
   submitLabel = "저장",
   map,
 }: {
+  id?: string;
   label: string;
   fields?: Field[];
   command: Record<string, unknown>;
@@ -121,7 +125,7 @@ export function Action({
     ? baseCommand
     : command;
   return (
-    <details className="wk-action" open={open || undefined}>
+    <details id={id} className="wk-action" open={open || undefined}>
       <summary>
         {label}
         <span>＋</span>

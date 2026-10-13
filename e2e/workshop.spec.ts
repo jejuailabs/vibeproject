@@ -183,7 +183,7 @@ test("source approval, file download and workshop mobile layout work", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/preview");
   await page
-    .getByRole("button", { name: "워크숍 이어서 진행하기", exact: false })
+    .getByRole("button", { name: "자료·녹취록 남기기", exact: true })
     .click();
   await tab(page, "자료·녹취록");
   let a = await open(page, "새 원문 기록");

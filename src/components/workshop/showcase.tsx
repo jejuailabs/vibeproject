@@ -21,14 +21,14 @@ export function Showcase(p: Props) {
   const showcases = recordsOf(p, "showcase");
   return (
     <>
-      <Box title="우리의 4주를 세상에 보여줄 시간" eyebrow="DEMO DAY">
+      <Box id="showcase-work" title="우리의 4주를 세상에 보여줄 시간" eyebrow="DEMO DAY">
         <p>
           공개할 변화 3~5개를 직접 골라주세요. 비공개 원문이나 팀 대화는 발표에
           자동으로 포함되지 않습니다.
         </p>
         {leader && team && (
           <Action
-            label="최종 발표 페이지 편집"
+            id="showcase-editor" label="최종 발표 페이지 편집"
             command={{ type: "showcase", projectId: team.id }}
             fields={[
               {

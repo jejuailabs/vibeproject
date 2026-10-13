@@ -85,7 +85,8 @@ export function Activities(p: Props) {
       <div className="wk-toolbar">
         <div>
           <span className="eyebrow">FACILITATION BOARD</span>
-          <h2>현장의 생각을, 함께 보는 기록으로.</h2>
+          <h2>지금 질문에 내 경험을 남겨보세요.</h2>
+          <p>질문 읽기 → 내 활동 결과 정리 → 동료의 결과 보기. 잘 정리된 답이 아니어도 괜찮아요.</p>
         </div>
         <button
           className="secondary-button"
