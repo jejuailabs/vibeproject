@@ -4,7 +4,7 @@ test('a thought grows through five questions, two drafts, readiness and history'
  await page.getByLabel('무슨 일이었나요?').fill('첫 대화를 시작하기 어려워요');
  await page.getByLabel('언제, 누구에게, 무엇이 불편했나요?').fill('처음 간 모임에서 혼자 기다렸어요.');
  await page.getByRole('button',{name:'카드 올리기',exact:true}).click();
- const card=page.locator('.journey-note').filter({hasText:'첫 대화를 시작하기 어려워요'});
+ const card=page.locator('.stage-thought .journey-note').filter({hasText:'첫 대화를 시작하기 어려워요'});
  await card.getByRole('button',{name:'이 생각 구체화하기'}).click();
  const editor=page.getByRole('region',{name:'생각 구체화와 문제정의'});
  await editor.getByLabel('누가 겪나요?',{exact:true}).fill('모임에 처음 참석한 사람');

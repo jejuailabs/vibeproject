@@ -28,9 +28,14 @@ async function main(){
   assert.equal(loaded.events.find(e=>e.ideaId===id&&e.revision===3)?.snapshot.refinement?.definition.focus,'한 모임의 시작 전 10분');
   assert.equal((await getWorkspace(cohortId,'seo')).ideas.find(i=>i.id===id)?.refinement?.draft,2);
   await assert.rejects(runCommand(cohortId,'seo',randomUUID(),{...partial,revision:4,scope:'cohort'}),/작성자/);
+  await runCommand(cohortId,'seo',randomUUID(),{type:'comment',ideaId:id,body:'초안 1의 범위를 더 좁히면 어떨까요?',context:{stage:'definition',revision:3}});
+  await assert.rejects(runCommand(cohortId,'seo',randomUUID(),{type:'comment',ideaId:id,body:'test',context:{stage:'definition',revision:2}}),/단계/);
+  await assert.rejects(runCommand(cohortId,'seo',randomUUID(),{type:'comment',ideaId:id,body:'test',context:{stage:'definition',revision:999}}),/버전/);
+  const feedback=(await getWorkspace(cohortId,'min')).comments.find(c=>c.ideaId===id);
+  assert.deepEqual(feedback?.context,{stage:'definition',revision:3});
   await c.collection('workshop').doc('settings').set({data:{state:'completed'}});
   await assert.rejects(runCommand(cohortId,'min',randomUUID(),{...partial,revision:4}),/읽기 전용/);
-  console.log('PASS: Firestore save/read, partial answers, two drafts, snapshots, idempotency, privacy, author/revision and completion guards');
+  console.log('PASS: Firestore save/read, partial answers, two drafts, snapshots, idempotency, privacy, version-specific feedback, author/revision and completion guards');
  }finally{if(!cohortId.startsWith('test-refinement-'))throw new Error('Invalid test scope');await db().recursiveDelete(c);console.log('Isolated test cohort removed.');}
 }
 main().catch(e=>{console.error(e.message);process.exitCode=1;});

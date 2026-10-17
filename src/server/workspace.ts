@@ -1,3 +1,4 @@
+import {feedbackContextSchema,validateFeedbackContext} from '@/lib/exhibition';
 import {refinementInputSchema,nextRefinement,statement} from '@/lib/refinement';
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
@@ -14,7 +15,7 @@ const commandSchema = z.discriminatedUnion('type', [
  z.object({ type: z.literal('createIdea'), title: short, body, kind: z.enum(['thought','question','progress']), scope: z.enum(['owner','project','cohort']) }),
  z.object({type:z.literal('refineIdea'),id,revision:z.number().int().nonnegative(),phase:z.enum(['questions','definition']),input:refinementInputSchema,reason:short,scope:z.enum(['owner','project','cohort'])}),
  z.object({ type: z.literal('editIdea'), id, revision: z.number().int().nonnegative(), title: short, body, reason: short }),
- z.object({ type: z.literal('comment'), ideaId: id, body }),
+ z.object({ type: z.literal('comment'), ideaId: id, body, context:feedbackContextSchema.optional() }),
  z.object({ type: z.literal('sendMessage'), channel: id, body: body.max(2000) }),
  z.object({ type: z.literal('selectIdea'), ideaId: id, revision: z.number().int().nonnegative(), projectName: short, reason: short }),
  z.object({ type: z.literal('closeIdea'), ideaId: id, revision: z.number().int().nonnegative(), reason: short }),
@@ -149,8 +150,13 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
    const idea={...snap.data(),id:ideaId} as Idea; assertCanRead(me,idea);
    if(command.type==='comment') {
     if(idea.state==='closed_unselected') throw new DomainError('LOCKED','종료된 아이디어는 읽기 전용입니다.',409);
+    if(command.context){
+     const versions=await tx.get(ref.collection('history').where('revision','==',command.context.revision).limit(1));
+     const snapshot=versions.docs[0]?.data()?.snapshot||(command.context.revision===idea.revision?idea:undefined);
+     validateFeedbackContext(command.context,snapshot);
+    }
     const comment=ref.collection('comments').doc();
-    tx.create(comment,{id:comment.id,ideaId,authorId:uid,body:command.body,createdAt:now});result={id:comment.id};
+    tx.create(comment,{id:comment.id,ideaId,authorId:uid,body:command.body,createdAt:now,...(command.context?{context:command.context}:{})});result={id:comment.id};
    } else if(command.type==='refineIdea') {
     assertEditable(me,idea,command.revision);
     if(command.scope==='project'&&!me.projectId)throw new DomainError('NO_PROJECT','프로젝트에 먼저 참여해주세요.',409);

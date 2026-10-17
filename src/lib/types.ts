@@ -10,7 +10,8 @@ export type Idea = {
  ownerId: string; scope: Scope; projectId: string | null; state: IdeaState;
  revision: number; version: number; createdAt: string; updatedAt: string; sourceId?: string; sourceMessageId?: string; sourceChannel?: string; sourceSubmissionId?: string;
 };
-export type Comment = { id: string; ideaId: string; authorId: string; body: string; createdAt: string };
+export type FeedbackContext = {stage:'thought'|'questions'|'definition'|'ready'; revision:number};
+export type Comment = {context?:FeedbackContext; id: string; ideaId: string; authorId: string; body: string; createdAt: string };
 export type Project = { id: string; name: string; problem: string; leaderId: string; memberIds: string[]; sourceIdeaId: string; stage: string; createdAt: string; mode?: 'solo'|'team'; capacity?: number };
 export type Message = { id: string; authorId: string; body: string; channel: string; createdAt: string; replyToId?: string; mentions?: string[]; revision?: number; pinned?: boolean; editedAt?: string };
 export type Activity = { id: string; title: string; question: string; description: string; state: 'open' | 'closed'; week: number };
@@ -23,7 +24,7 @@ export type Command =
  | { type: 'createIdea'; title: string; body: string; kind: Idea['kind']; scope: Scope }
  | { type: 'refineIdea'; id: string; revision: number; phase: 'questions'|'definition'; input: RefinementInput; reason: string; scope: Scope }
  | { type: 'editIdea'; id: string; revision: number; title: string; body: string; reason: string }
- | { type: 'comment'; ideaId: string; body: string }
+ | { type: 'comment'; ideaId: string; body: string; context?: FeedbackContext }
  | { type: 'sendMessage'; channel: string; body: string }
  | { type: 'selectIdea'; ideaId: string; revision: number; projectName: string; reason: string }
  | { type: 'closeIdea'; ideaId: string; revision: number; reason: string }
