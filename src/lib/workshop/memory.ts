@@ -43,10 +43,12 @@ export class MemoryStore implements Store {
     this.rows.delete(p);
   }
 }
+// Server-only rows (join password hashes) never enter PreviewState; keep them in this page's memory.
+const privateRows = new Map<string, unknown>();
 export async function previewWorkshop(
   state: PreviewState,
   raw: unknown,
-): Promise<PreviewState> {
+): Promise<PreviewState & { result: unknown }> {
   const w = structuredClone(state.workspace),
     s = new MemoryStore(),
     root = "cohorts/" + w.cohort.id;
@@ -68,6 +70,7 @@ export async function previewWorkshop(
     s.write(root + "/ideas/" + e.ideaId + "/comments/" + e.id, e);
   for (const r of state.records) s.write(root + "/workshop/" + r.id, r);
   s.write(root + "/activities/discovery", w.activity);
+  for (const [k, v] of privateRows) s.write(k, v);
   const c: Context = {
     store: s,
     uid: w.me.id,
@@ -79,7 +82,10 @@ export async function previewWorkshop(
       (r) => r.kind === "support" && r.ownerId === w.me.id,
     ) as import("./model").RecordOf<"support">[],
   };
-  await applyWorkshop(c, raw);
+  const result = await applyWorkshop(c, raw);
+  privateRows.clear();
+  for (const [k, v] of s.rows)
+    if (k.startsWith(root + "/projectSecrets/")) privateRows.set(k, v);
   const members = await s.list<Member>(root + "/members"),
     ideas = await s.list<Idea>(root + "/ideas");
   const cohort = await s.read<Workspace["cohort"]>(root);
@@ -108,5 +114,6 @@ export async function previewWorkshop(
         .map(([, v]) => v as Comment),
     },
     records: await s.list<WorkshopRecord>(root + "/workshop"),
+    result,
   };
 }

@@ -3,7 +3,7 @@ import {refinementInputSchema,nextRefinement,statement} from '@/lib/refinement';
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { db } from './firebase';
-import { DomainError, assertAdmin, assertCanRead, assertChannel, assertEditable, assertRevision, canReadIdea, validateSelection } from '@/lib/policy';
+import { DomainError, assertAdmin, assertCanRead, assertChannel, assertEditable, assertRevision, canReadIdea, projectIdsOf, validateSelection } from '@/lib/policy';
 import type { Activity, Command, Comment, HistoryEvent, Idea, Member, Message, Project, Workspace } from '@/lib/types';
 import { z } from 'zod';
 import {characterIds} from '@/lib/characters';
@@ -186,7 +186,8 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
     const project:Project={id:projectRef.id,name:command.projectName,problem:idea.refinement?.ready?statement(idea.refinement):idea.title,leaderId:owner.id,memberIds:[owner.id],sourceIdeaId:idea.id,stage:'기획 중',createdAt:now};
     tx.create(projectRef,project);tx.create(c.collection('projectDirectory').doc(projectRef.id),project);
     tx.create(projectRef.collection('members').doc(owner.id),{role:'leader',status:'active',acceptedAt:now});
-    tx.update(ownerRef,{projectId:projectRef.id});tx.update(c.collection('profiles').doc(owner.id),{projectId:projectRef.id});
+    const membership={projectId:projectRef.id,projectIds:[...new Set([...projectIdsOf(owner),projectRef.id])]};
+    tx.update(ownerRef,membership);tx.update(c.collection('profiles').doc(owner.id),membership);
     const next={...idea,state:'selected' as const,revision:idea.revision+1,updatedAt:now};
     tx.update(ref,next);history(next,'프로젝트로 선정되었어요',command.reason);result={id:projectRef.id};
    }

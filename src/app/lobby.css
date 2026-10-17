@@ -1,0 +1,75 @@
+/* Project lobby: one clear choice (create or join) before entering a project. */
+.lobby{display:grid;gap:22px;margin:4px 0 32px;min-width:0}
+.lobby-block{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px;min-width:0;color:var(--ink)}
+.lobby-heading{margin-bottom:18px}
+.lobby-step{font-size:10px;font-weight:800;letter-spacing:1.4px;color:#8a63c2;text-transform:uppercase}
+.lobby-heading h2{font-size:20px;letter-spacing:-.8px;margin-top:6px}
+.lobby-heading p{font-size:12px;color:#8e869a;margin-top:6px;line-height:1.7}
+.lobby-invite{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:#fff7ec;border:1px solid #f4dcb8;color:#6b4a1f;border-radius:14px;padding:16px 18px;font-size:13px}
+.lobby-invite span{display:flex;align-items:center;gap:7px}
+.lobby-choice{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.lobby-choice button{display:flex;align-items:center;gap:14px;text-align:left;border:1.5px solid #e6def0;border-radius:14px;padding:18px;background:#fbf9fd;color:#5b4775}
+.lobby-choice button.active{border-color:#7854b8;background:#f3ecfc;box-shadow:0 6px 18px #7854b81f}
+.lobby-choice strong{display:block;font-size:15px;color:#2c2937}
+.lobby-choice small{display:block;font-size:11px;color:#8e869a;margin-top:4px;line-height:1.5}
+.lobby-form{display:grid;gap:16px;max-width:620px}
+.lobby-form label,.lobby-form legend{display:block;font-size:13px;font-weight:700;color:#4c3f5c}
+.lobby-form label em{font-style:normal;font-weight:500;color:#a59bb0;font-size:11px;margin-left:4px}
+.lobby-form label small,.lobby-password small{display:block;font-weight:500;color:#9a8ea8;font-size:11px;margin-top:6px}
+.lobby-form input,.lobby-access input{display:block;width:100%;margin-top:8px;border:1px solid #e3d9eb;border-radius:9px;padding:12px;font-size:14px;background:#fdfcfe;color:#3e3249}
+.lobby-form fieldset{border:0;padding:0;margin:0;min-width:0}
+.lobby-form legend{margin-bottom:8px}
+.lobby-num{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:#efe7fb;color:#7854b8;font-size:11px;font-weight:800;margin-right:6px}
+.lobby-policies{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.lobby-policies label{display:flex;gap:9px;align-items:flex-start;border:1.5px solid #e6def0;border-radius:11px;padding:12px;cursor:pointer;font-weight:500;color:#5b4775;margin:0}
+.lobby-policies label.active{border-color:#7854b8;background:#f6f0fd}
+.lobby-policies input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.lobby-policies label:focus-within{outline:3px solid #af93e6;outline-offset:2px}
+.lobby-policies strong{display:block;font-size:13px;color:#2c2937}
+.lobby-policies small{display:block;font-size:11px;color:#8e869a;margin-top:3px;line-height:1.5}
+.lobby-password{margin-top:12px}
+.lobby-actions{display:flex;align-items:center;justify-content:flex-end;gap:14px;flex-wrap:wrap}
+.lobby-actions small{font-size:11px;color:#9a8ea8;margin-right:auto}
+.lobby-mine{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.lobby-card{border:1.5px solid #ece6f2;border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.lobby-card.current{border-color:#7854b8;background:#faf6ff}
+.lobby-card header{display:flex;gap:6px}
+.lobby-tag{font-size:10px;font-weight:700;background:#f2eef7;color:#7a6690;border-radius:6px;padding:3px 8px}
+.lobby-tag.on{background:#e7f6ee;color:#2f7a52}
+.lobby-card h3{font-size:16px;letter-spacing:-.5px}
+.lobby-card p{font-size:12px;color:#8e869a;line-height:1.6;overflow-wrap:anywhere}
+.lobby-card footer{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.lobby-card footer small{display:flex;align-items:center;gap:4px;font-size:11px;color:#9a8ea8}
+.lobby-leader{margin-top:16px;border-top:1px dashed #e6def0;padding-top:16px}
+.lobby-leader-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.lobby-leader-row>div{margin-right:auto;min-width:200px}
+.lobby-leader-row strong{display:block;font-size:13px}
+.lobby-leader-row small{display:block;font-size:11px;color:#9a8ea8;margin-top:4px}
+.lobby-access{margin-top:14px;display:grid;gap:12px;background:#fbf9fd;border-radius:12px;padding:14px}
+.lobby-access label:not(.active){font-size:12px;font-weight:600;color:#5b4775}
+.lobby-search{display:flex;align-items:center;gap:8px;border:1px solid #e3d9eb;border-radius:10px;padding:0 12px;color:#a094ad;margin-bottom:12px}
+.lobby-search input{border:0;flex:1;padding:12px 0;font-size:13px;background:transparent;color:#3e3249}
+.lobby-list{display:grid;gap:10px}
+.lobby-row{display:flex;align-items:center;gap:16px;border:1px solid #ece6f2;border-radius:13px;padding:15px 16px;min-width:0}
+.lobby-row-main{flex:1;min-width:0}
+.lobby-row h3{font-size:15px;letter-spacing:-.4px}
+.lobby-row p{font-size:12px;color:#8e869a;margin-top:4px;line-height:1.6;overflow-wrap:anywhere}
+.lobby-meta{display:flex;flex-wrap:wrap;gap:6px 12px;margin-top:8px;font-size:11px;color:#9a8ea8}
+.lobby-meta span{display:inline-flex;align-items:center;gap:4px}
+.lobby-policy{font-weight:700}
+.lobby-policy.open{color:#2f7a52}.lobby-policy.password{color:#a35a1f}.lobby-policy.request{color:#6a52a8}
+.lobby-row-action{flex-shrink:0}
+.lobby-row-action form{display:flex;align-items:center;gap:6px;color:#a35a1f}
+.lobby-row-action input{width:130px;border:1px solid #e3d9eb;border-radius:8px;padding:10px;font-size:13px}
+.lobby-note{font-size:11px;font-weight:700;color:#9a8ea8}
+.lobby-empty{text-align:center;padding:26px;border:1px dashed #ddd2e8;border-radius:12px;color:#8e869a;font-size:13px;display:grid;gap:8px;justify-items:center}
+@media(max-width:700px){.lobby-block{padding:18px 16px}.lobby-choice,.lobby-policies{grid-template-columns:1fr}.lobby-row{flex-direction:column;align-items:stretch}.lobby-row-action form{width:100%}.lobby-row-action input{flex:1;width:auto;min-width:0}.lobby-row-action>.primary-button,.lobby-row-action>.secondary-button{width:100%;justify-content:center}}
+/* The arena theme paints main-content headings white; lobby cards are light surfaces. */
+.lobby .lobby-block h2,.lobby .lobby-block h3,.lobby .lobby-block strong{color:#2c2937}
+.lobby .lobby-tag.on{color:#2f7a52}
+.lobby .primary-button{background:#7854b8;color:#fff;border:0}
+.lobby .primary-button:hover{background:#6743a8}
+.lobby .secondary-button{background:#fff;color:#5e3f93;border:1px solid #d9cceb;font-weight:700}
+.lobby .secondary-button:hover{background:#f6f0fd}
+.lobby .text-button{color:#6a45a8;background:none}
+.lobby .lobby-note{color:#7d7190}

@@ -1,4 +1,4 @@
-import { DomainError, assertCanRead, assertChannel } from "../policy";
+import { DomainError, assertCanRead, assertChannel, projectIdsOf } from "../policy";
 import type { Member, Project, Idea } from "../types";
 import type {
   Context,
@@ -224,7 +224,21 @@ export function saveProject(c: Context, p: Project) {
   c.store.write(path(c, "projects/" + p.id), p);
   c.store.write(path(c, "projectDirectory/" + p.id), p);
 }
-export function setMembership(c: Context, m: Member, projectId: string | null) {
-  c.store.write(path(c, "members/" + m.id), { projectId }, true);
-  c.store.write(path(c, "profiles/" + m.id), { projectId }, true);
+function membership(c: Context, m: Member, projectId: string | null, projectIds: string[]) {
+  const patch = { projectId, projectIds };
+  c.store.write(path(c, "members/" + m.id), patch, true);
+  c.store.write(path(c, "profiles/" + m.id), patch, true);
+  if (m.id === c.uid) c.me = { ...c.me, ...patch };
+}
+// A member may belong to several projects; joining also makes the project the one they work in.
+export function joinMembership(c: Context, m: Member, projectId: string) {
+  membership(c, m, projectId, [...new Set([...projectIdsOf(m), projectId])]);
+}
+export function leaveMembership(c: Context, m: Member, projectId: string) {
+  const rest = projectIdsOf(m).filter((id) => id !== projectId);
+  membership(c, m, m.projectId === projectId ? rest[0] || null : m.projectId, rest);
+}
+export function activateMembership(c: Context, m: Member, projectId: string) {
+  if (!projectIdsOf(m).includes(projectId)) fail("참여한 프로젝트가 아닙니다.", 403);
+  membership(c, m, projectId, projectIdsOf(m));
 }

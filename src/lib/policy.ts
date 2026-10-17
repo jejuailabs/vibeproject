@@ -4,6 +4,9 @@ import type { Idea, Member } from './types';
 export class DomainError extends Error {
  constructor(public code: string, message: string, public status = 400) { super(message); }
 }
+export function projectIdsOf(member: Member): string[] {
+ return member.projectIds ?? (member.projectId ? [member.projectId] : []);
+}
 export function canReadIdea(member: Member, idea: Idea): boolean {
  if (!member.active) return false;
  if (idea.scope === 'owner') return idea.ownerId === member.id;
@@ -33,5 +36,4 @@ export function validateSelection(member: Member, idea: Idea, revision: number, 
  assertAdmin(member); assertCanRead(member, idea); assertRevision(idea, revision);
  if (idea.scope !== 'cohort' || idea.state !== 'shared') throw new DomainError('INVALID_STATE', '기수에 공유된 아이디어만 선정할 수 있습니다.', 409);
  assertProblemReady(idea);
- if (owner.projectId) throw new DomainError('ALREADY_JOINED', '제안자가 이미 프로젝트에 참여 중입니다.', 409);
 }

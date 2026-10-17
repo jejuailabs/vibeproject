@@ -23,6 +23,7 @@ const date = z
   .datetime({ offset: true })
   .transform((v) => new Date(v).toISOString());
 const project = { projectId: id };
+const joinPolicy = z.enum(["open", "password", "request"]);
 const S = <T extends z.ZodRawShape>(fields: T) => z.object(fields).strict();
 export const workshopCommand = z.discriminatedUnion("type", [
   S({
@@ -119,6 +120,27 @@ export const workshopCommand = z.discriminatedUnion("type", [
     reason,
   }),
   S({ type: z.literal("withdrawJoin"), requestId: id }),
+  S({
+    type: z.literal("openProject"),
+    name: z.string().trim().min(1).max(60),
+    intro: z.string().trim().max(300),
+    capacity: z.number().int().min(1).max(100),
+    joinPolicy,
+    password: z.string().max(64).optional(),
+  }),
+  S({
+    type: z.literal("enterProject"),
+    ...project,
+    password: z.string().max(64).optional(),
+    invite: z.string().regex(/^[a-f0-9]{32}$/).optional(),
+  }),
+  S({
+    type: z.literal("projectAccess"),
+    ...project,
+    joinPolicy,
+    password: z.string().max(64).optional(),
+    resetInvite: z.boolean(),
+  }),
   S({ type: z.literal("leaveProject"), ...project, reason }),
   S({ type: z.literal("transferLeader"), ...project, memberId: id, reason }),
   S({

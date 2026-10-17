@@ -37,7 +37,7 @@ export async function studio(
       const team = await editableProject(c, cmd.projectId);
       const id = "doc-" + cmd.projectId + "-" + cmd.key,
         old = await optional(c, id, "document");
-      const sourceIdea=cmd.key==="product"?await c.store.read<Idea>(path(c,"ideas/"+team.sourceIdeaId)):undefined;
+      const sourceIdea=cmd.key==="product"&&team.sourceIdeaId?await c.store.read<Idea>(path(c,"ideas/"+team.sourceIdeaId)):undefined;
       const sourceId=old?.data.sourceId||(sourceIdea?.refinement?sourceIdea.sourceId:undefined);
       if(sourceId){
         const source=await optional(c,sourceId,"source");

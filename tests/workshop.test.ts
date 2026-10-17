@@ -119,7 +119,7 @@ test("vote freezes candidates, secret ballots enforce budget, self-vote and revi
   assert.equal(s.workspace.ideas.find((i) => i.id === "i2")!.state, "selected");
   assert.equal(s.workspace.projects.length, 2);
 });
-test("membership rejects second team, capacity overflow and leader leaving; leave permits a new request", async () => {
+test("membership rejects duplicate join, capacity overflow and leader leaving; leave permits a new request", async () => {
   let s = fresh();
   s = await run(s, {
     type: "join",
@@ -166,7 +166,7 @@ test("membership rejects second team, capacity overflow and leader leaving; leav
   );
   await assert.rejects(
     run(as(s, "min"), { type: "join", projectId: "p-onboarding", message: "" }),
-    /탈퇴/,
+    /이미 참여/,
   );
   await assert.rejects(
     run(s, {

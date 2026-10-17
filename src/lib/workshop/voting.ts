@@ -19,7 +19,8 @@ import {
   project,
   defaults,
   saveProject,
-  setMembership,
+  joinMembership,
+  leaveMembership,
 } from "./core";
 
 async function makeProject(
@@ -34,7 +35,6 @@ async function makeProject(
   // Already frozen rounds created before refinement existed keep their original selection path.
   if(!(source.state==="candidate"&&!source.refinement))assertProblemReady(source);
   const owner = await member(c, source.ownerId);
-  if (owner.projectId) fail("제안자가 이미 다른 프로젝트에 참여하고 있습니다.");
   const settings = await optional(c, "settings", "settings");
   if (settings?.data.mode === "solo" && mode !== "solo")
     fail("현재 기수는 개인 프로젝트 방식입니다.");
@@ -54,7 +54,7 @@ async function makeProject(
     capacity: mode === "solo" ? 1 : capacity,
   };
   saveProject(c, p);
-  setMembership(c, owner, id);
+  joinMembership(c, owner, id);
   c.store.write(path(c, "projects/" + id + "/members/" + owner.id), {
     role: "leader",
     status: "active",
@@ -324,11 +324,11 @@ export async function voting(
       return { id: i.id };
     }
     case "join": {
-      if (c.me.projectId) fail("현재 프로젝트에서 탈퇴한 후 신청해주세요.");
       const p = await c.store.read<Project>(
         path(c, "projects/" + cmd.projectId),
       );
       if (!p) fail("프로젝트를 찾을 수 없습니다.", 404);
+      if (p.memberIds.includes(c.uid)) fail("이미 참여한 프로젝트입니다.");
       const cfg = await defaults(c, p.id);
       if (cfg.data.mode === "solo")
         fail("개인 프로젝트는 참여 신청을 받지 않습니다.");
@@ -363,14 +363,14 @@ export async function voting(
       const applicant = await member(c, r.data.applicantId),
         cfg = await defaults(c, p.id);
       if (cmd.accept) {
-        if (applicant.projectId)
-          fail("신청자가 이미 다른 프로젝트에 참여하고 있습니다.");
+        if (p.memberIds.includes(applicant.id))
+          fail("이미 참여한 팀원입니다.");
         if (cfg.data.mode === "solo" || p.memberIds.length >= cfg.data.capacity)
           fail("프로젝트 정원이 가득 찼습니다.");
         if (["completed", "archived"].includes(cfg.data.stage))
           fail("종료된 프로젝트입니다.");
         saveProject(c, { ...p, memberIds: [...p.memberIds, applicant.id] });
-        setMembership(c, applicant, p.id);
+        joinMembership(c, applicant, p.id);
         c.store.write(
           path(c, "projects/" + p.id + "/members/" + applicant.id),
           { role: "member", status: "active", acceptedAt: c.now },
@@ -425,7 +425,7 @@ export async function voting(
         ...p,
         memberIds: p.memberIds.filter((id) => id !== c.uid),
       });
-      setMembership(c, c.me, null);
+      leaveMembership(c, c.me, p.id);
       c.store.write(
         path(c, "projects/" + p.id + "/members/" + c.uid),
         { status: "left", leftAt: c.now },
@@ -438,7 +438,7 @@ export async function voting(
       const p = await project(c, cmd.projectId, "roster");
       const next = await member(c, cmd.memberId);
       if (next.id === p.leaderId) fail("현재 팀장과 동일합니다.");
-      if (next.projectId !== p.id || !p.memberIds.includes(next.id))
+      if (!p.memberIds.includes(next.id))
         fail("현재 팀원에게만 리더를 이관할 수 있습니다.");
       saveProject(c, { ...p, leaderId: next.id });
       c.store.write(

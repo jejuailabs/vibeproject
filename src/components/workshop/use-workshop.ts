@@ -80,6 +80,7 @@ export function useWorkshop({
   async function run(command: unknown) {
     setBusy(true);
     setError("");
+    let denied: { denied?: boolean; message?: string } | null = null;
     try {
       if (preview) {
         if (!data) throw new Error("작업 공간이 없습니다.");
@@ -89,6 +90,7 @@ export function useWorkshop({
         );
         setData(result.workspace);
         setRecords(result.records);
+        denied = (result.result as { denied?: boolean; message?: string } | null) || null;
       } else {
         if (!user) throw new Error("로그인이 필요합니다.");
         const key = JSON.stringify(command);
@@ -114,7 +116,12 @@ export function useWorkshop({
         const value = await response.json();
         if (!response.ok) throw new Error(value.error);
         pending.current = null;
+        denied = value;
         await Promise.all([refresh(), reload(user)]);
+      }
+      if (denied?.denied) {
+        setError(denied.message || "요청을 처리하지 못했습니다.");
+        return false;
       }
       setNotice(
         preview
@@ -150,6 +157,7 @@ export function useWorkshop({
   async function upload(file: File, scope: string, projectId: string | null) {
     setBusy(true);
     setError("");
+    let denied: { denied?: boolean; message?: string } | null = null;
     try {
       if (
         file.size > 10485760 ||
@@ -261,6 +269,7 @@ export function useWorkshop({
   async function exportBaseline(id: string) {
     setBusy(true);
     setError("");
+    let denied: { denied?: boolean; message?: string } | null = null;
     try {
       if (preview) {
         const b = records.find(

@@ -135,3 +135,16 @@ MIME/확장자/크기 검사, 허용 목록, HTML/SVG 실행 차단, Markdown �
 ## 2026-10-17 문제정의 과정 추가
 
 [생각 구체화·문제정의](problem-definition.md)의 다섯 질문, 초안 버전, 통제범위, 선정 준비 및 공개 범위를 적용한다. Idea.refinement와 이력 snapshot.refinement가 같은 카드의 발전 과정을 담는다. 신규 투표는 준비된 문제정의를 고정하며, 선정한 문장이 프로젝트 기획의 출발점이 된다.
+
+
+## 2026-10-18 프로젝트 입구와 다중 참여
+
+| 경로 | 주요 필드 | 접근 |
+|---|---|---|
+| cohorts/{c}/members/{uid} | projectId(작업 중), projectIds(전체 참여) | 본인/기수 운영 |
+| cohorts/{c}/projects/{p} | intro, joinPolicy(open/password/request) | 팀 내부, 디렉터리에 복제 |
+| cohorts/{c}/projectSecrets/{p} | salt, hash, iterations | 서버만 |
+| cohorts/{c}/projectSecrets/{p}/attempts/{uid} | count, since | 서버만 |
+| workshop/project-{p}.data.inviteCode | 32자리 초대 코드 | 해당 프로젝트 팀원 |
+
+기본 1인 1프로젝트 규칙을 해제했다. 같은 프로젝트 중복 참여만 막고 정원은 트랜잭션에서 확인한다. openProject, enterProject, projectAccess 명령은 [lobby.ts](../src/lib/workshop/lobby.ts)에 있다.

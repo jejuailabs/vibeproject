@@ -2,7 +2,7 @@ import {validateFeedbackContext,feedbackContextSchema} from './exhibition';
 import {nextRefinement,statement,emptyRefinement} from './refinement';
 import type {Workspace,Command,Idea,HistoryEvent} from './types';
 import {isCharacterId} from './characters';
-import {assertAdmin,assertEditable,assertCanRead,assertChannel,validateSelection} from './policy';
+import {assertAdmin,assertEditable,assertCanRead,assertChannel,validateSelection,projectIdsOf} from './policy';
 const date='2026-10-12T01:00:00.000Z';
 export function previewWorkspace():Workspace {
  const members=[
@@ -60,7 +60,7 @@ export function previewCommand(state:Workspace,command:Command):Workspace {
   else{
    const owner=next.members.find(m=>m.id===idea.ownerId)!;validateSelection(next.me,idea,command.revision,owner);
    const project={id:uuid(),name:command.projectName,problem:idea.refinement?.ready?statement(idea.refinement):idea.title,leaderId:idea.ownerId,memberIds:[idea.ownerId],sourceIdeaId:idea.id,stage:'기획 중',createdAt:now};
-   next.projects.push(project);owner.projectId=project.id;if(owner.id===uid)next.me.projectId=project.id;
+   next.projects.push(project);owner.projectIds=[...new Set([...projectIdsOf(owner),project.id])];owner.projectId=project.id;if(owner.id===uid){next.me.projectId=project.id;next.me.projectIds=owner.projectIds;}
    idea.state='selected';idea.revision++;record(idea,'프로젝트로 선정되었어요',command.reason);
   }
  }

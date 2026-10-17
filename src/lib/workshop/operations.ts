@@ -20,9 +20,10 @@ import {
   editableProject,
   canRead,
   saveProject,
-  setMembership,
+  leaveMembership,
   assertChannel,
 } from "./core";
+import { projectIdsOf } from "../policy";
 async function hash(text: string) {
   return Array.from(
     new Uint8Array(
@@ -128,17 +129,21 @@ export async function operations(
         if (all.filter((x) => x.active && x.role === "admin").length <= 1)
           fail("마지막 관리자는 유지해야 합니다.");
       }
-      if (!cmd.active && m.projectId) {
-        const p = await c.store.read<import("../types").Project>(
-          path(c, "projects/" + m.projectId),
-        );
-        if (p?.leaderId === m.id) fail("리더 이관 후 참여를 중지해주세요.");
-        if (p)
-          saveProject(c, {
-            ...p,
-            memberIds: p.memberIds.filter((id) => id !== m.id),
-          });
-        setMembership(c, m, null);
+      if (!cmd.active) {
+        let current = m;
+        for (const pid of projectIdsOf(m)) {
+          const p = await c.store.read<import("../types").Project>(
+            path(c, "projects/" + pid),
+          );
+          if (p?.leaderId === m.id) fail("리더 이관 후 참여를 중지해주세요.");
+          if (p)
+            saveProject(c, {
+              ...p,
+              memberIds: p.memberIds.filter((id) => id !== m.id),
+            });
+          leaveMembership(c, current, pid);
+          current = { ...current, projectIds: projectIdsOf(current).filter((id) => id !== pid), projectId: null };
+        }
       }
       const patch = { role: cmd.role, active: cmd.active };
       c.store.write(path(c, "members/" + m.id), patch, true);

@@ -3,6 +3,7 @@ import { workshopCommand } from "./commands";
 import { voting } from "./voting";
 import { studio } from "./studio";
 import { operations } from "./operations";
+import { lobby } from "./lobby";
 import { fail, optional } from "./core";
 export async function applyWorkshop(c: Context, raw: unknown) {
   const command = workshopCommand.parse(raw);
@@ -23,6 +24,7 @@ export async function applyWorkshop(c: Context, raw: unknown) {
   )
     fail("종료된 기수는 읽기 전용입니다.");
   return (
+    (await lobby(c, command)) ||
     (await voting(c, command)) ||
     (await studio(c, command)) ||
     (await operations(c, command)) ||

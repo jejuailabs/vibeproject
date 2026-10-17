@@ -87,6 +87,7 @@ export type ProjectData = {
   repositoryUrl: string;
   deployUrl: string;
   firebaseUrl: string;
+  inviteCode?: string;
 };
 export interface DataMap {
   settings: {

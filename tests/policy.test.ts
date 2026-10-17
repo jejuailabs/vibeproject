@@ -22,4 +22,4 @@ test('only admin can select a shared cohort idea',()=>{
  assert.throws(()=>validateSelection(member,{...idea,scope:'cohort'},2,{...member,projectId:null}),/관리자/);
  assert.doesNotThrow(()=>validateSelection({...member,role:'admin'},{...idea,scope:'cohort'},2,{...member,projectId:null}));
 });
-test('selection cannot create a second active project for the author',()=>assert.throws(()=>validateSelection({...member,role:'admin'},{...idea,scope:'cohort'},2,member),/이미/));
+test('selection allows an author who already belongs to another project',()=>assert.doesNotThrow(()=>validateSelection({...member,role:'admin'},{...idea,scope:'cohort'},2,member)));
