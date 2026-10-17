@@ -6,10 +6,12 @@ export function RefinementSummary({value}:{value?:Refinement}){
  if(!value)return null;
  return <details className="refinement-summary"><summary>질문 답변·문제정의 {value.draft?`초안 ${value.draft}`:''}{value.ready?' · 선정 준비':''}</summary><pre>{refinementText(value)}</pre></details>;
 }
-export function IdeaRefinement({idea,editable,hasProject,busy,error,run}:{idea:Idea;editable:boolean;hasProject:boolean;busy:boolean;error?:string;run:(c:Command)=>Promise<boolean>}){
+export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePanel,onPanelChange}:{idea:Idea;editable:boolean;hasProject:boolean;busy:boolean;error?:string;run:(c:Command)=>Promise<boolean>;activePanel?:'questions'|'definition';onPanelChange?:(panel:'questions'|'definition')=>void}){
  const [value,setValue]=useState<Refinement>(()=>structuredClone(idea.refinement||emptyRefinement()));
  const [base,setBase]=useState(idea.revision),[scope,setScope]=useState<Scope>(idea.scope);
- const [panel,setPanel]=useState<'questions'|'definition'>(answered(idea.refinement)===5?'definition':'questions');
+ const [localPanel,setLocalPanel]=useState<'questions'|'definition'>(answered(idea.refinement)===5?'definition':'questions');
+ const panel=activePanel||localPanel;
+ function setPanel(next:'questions'|'definition'){setLocalPanel(next);onPanelChange?.(next);}
  const [reason,setReason]=useState(''),[saved,setSaved]=useState('');
  const conflict=base!==idea.revision, complete=answered(value)===5;
  const definitionComplete=definitionFields.every(([k])=>value.definition[k].trim())&&value.definition.solutionReviewed;
@@ -29,7 +31,7 @@ export function IdeaRefinement({idea,editable,hasProject,busy,error,run}:{idea:I
  if(!editable)return <section className="refinement-read"><span className="refinement-badge">{refinementLabel(idea)}</span>{idea.refinement?.draft?<blockquote>{statement(idea.refinement)}</blockquote>:<p>작성자가 질문에 답하면서 문제를 구체화하고 있어요. 아래 의견으로 경험과 질문을 보태주세요.</p>}<RefinementSummary value={idea.refinement}/></section>;
  return <section className="refinement-editor" aria-label="생각 구체화와 문제정의">
   <header><span className="refinement-badge">{refinementLabel(idea)}</span><h3>이 생각을 문제로 다듬어볼까요?</h3><p>경험을 구체화하고, 해결 방법을 정하기 전에 문제를 한 문장으로 남겨요.</p></header>
-  <nav aria-label="생각 다듬기 단계"><button type="button" aria-pressed={panel==='questions'} onClick={()=>setPanel('questions')}>1. 경험 구체화 · {answered(value)}/5</button><button type="button" aria-pressed={panel==='definition'} disabled={answered(idea.refinement)!==5} onClick={()=>setPanel('definition')}>2. 문제정의카드</button></nav>
+  <nav aria-label="생각 다듬기 단계" hidden={!!activePanel}><button type="button" aria-pressed={panel==='questions'} onClick={()=>setPanel('questions')}>1. 경험 구체화 · {answered(value)}/5</button><button type="button" aria-pressed={panel==='definition'} disabled={answered(idea.refinement)!==5} onClick={()=>setPanel('definition')}>2. 문제정의카드</button></nav>
   {conflict&&<div role="alert" className="refinement-conflict">다른 변경이 먼저 저장됐어요. 입력은 유지했습니다. 최신 내용을 확인한 뒤 다시 작성해주세요.<button type="button" onClick={reload}>최신 저장본 불러오기</button></div>}
   <form onSubmit={e=>{e.preventDefault();void save(panel);}}>
    <fieldset disabled={busy||conflict}>

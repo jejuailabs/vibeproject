@@ -1,9 +1,10 @@
 "use client";
+import {IdeaStart} from "./idea-start";
 import {IdeaExhibition} from "./idea-exhibition";
-import {useState} from "react";
-import {ArrowRight, Check, Plus, Pencil, Lock, ArrowUpRight} from "lucide-react";
-import {canReadIdea} from "@/lib/policy";
+import {useState,useEffect} from "react";
+import {ArrowRight, Check, ArrowUpRight} from "lucide-react";
 import {characterFor} from "@/lib/characters";
+import {canReadIdea} from "@/lib/policy";
 import {docKeys, docNames, type DocKey} from "@/lib/workshop/model";
 import {recordsOf, type Props} from "./workshop/common";
 import type {Command} from "@/lib/types";
@@ -14,10 +15,10 @@ const steps = [
  {name:"결과 나누기", output:"시연과 달라진 생각", title:"처음 생각에서 무엇이 달라졌나요?", hint:"만든 것을 보여주고, 바뀐 생각과 다음에 해볼 일을 남겨주세요."},
 ];
 const prompts:Record<DocKey,string>={product:"누구의 어떤 불편을 해결하나요?",features:"이번에 꼭 만들 기능은 무엇인가요?",screens:"사용자는 어디서 시작해 무엇을 하나요?",design:"어떤 화면을 참고하고 어떻게 적용하나요?","data-auth":"무엇을 저장하고 누가 볼 수 있나요?","setup-deploy":"어디에서 개발하고 배포하나요?",acceptance:"어떻게 동작하면 완성인가요?"};
-type BoardProps=Props & {saveIdea:(c:Command)=>Promise<boolean>;onIdea:(id:string)=>void;onNavigate:(tab:string,doc?:DocKey,target?:string)=>void;scope:"me"|"cohort"|"project";loadMore:(kind:"comments"|"history",id:string)=>Promise<void>};
+type BoardProps=Props & {saveIdea:(c:Command,onResult?:(result:{id?:string})=>void)=>Promise<boolean>;startRequest:number;onIdea:(id:string)=>void;onNavigate:(tab:string,doc?:DocKey,target?:string)=>void;scope:"me"|"cohort"|"project";loadMore:(kind:"comments"|"history",id:string)=>Promise<void>};
 export function JourneyBoard(p:BoardProps){
  const w=p.workspace, me=w.me, team=w.projects.find(x=>x.id===me.projectId);
- const [step,setStep]=useState(Math.min(4,Math.max(1,w.cohort.week))),[title,setTitle]=useState(""),[body,setBody]=useState(""),[privateNote,setPrivateNote]=useState(false),[mine,setMine]=useState(false),[saved,setSaved]=useState(false);
+ const [step,setStep]=useState(!team&&!w.ideas.some(i=>i.ownerId===me.id)?1:Math.min(4,Math.max(1,w.cohort.week))),[mine,setMine]=useState(false);
  const spec=steps[step-1],myIdeas=w.ideas.filter(x=>x.ownerId===me.id&&x.kind==="thought"),docs=recordsOf(p,"document").filter(x=>x.projectId===team?.id&&!x.data.redacted),baselines=recordsOf(p,"baseline").filter(x=>x.projectId===team?.id),releases=recordsOf(p,"release").filter(x=>x.projectId===team?.id),showcase=recordsOf(p,"showcase").find(x=>x.projectId===team?.id);
  const leader=team?.leaderId===me.id;
  const hasDoc=(key:DocKey)=>docs.find(x=>x.data.key===key&&x.data.markdown.trim());
@@ -25,23 +26,14 @@ export function JourneyBoard(p:BoardProps){
  const ended=recordsOf(p,"settings")[0]?.data.state==="completed";
  const currentActivity=recordsOf(p,"activity").find(x=>x.data.featured&&x.data.state==="open");
  const cards=w.ideas.filter(x=>canReadIdea(me,x)&&(!mine||x.ownerId===me.id)&&(p.scope!=="project"||(!!team&&(x.projectId===team.id||x.id===team.sourceIdeaId)))).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
- function go(n:number){setStep(n);setSaved(false);}
+ useEffect(()=>{if(p.startRequest)setStep(1);},[p.startRequest]);
+ function go(n:number){setStep(n);}
  return <section className="journey-board" aria-label="단계별 활동 보드">
   <nav className="journey-steps" aria-label="프로젝트 진행 단계">{steps.map((s,i)=><button key={s.name} type="button" className={step===i+1?"active":""} aria-current={step===i+1?"step":undefined} onClick={()=>go(i+1)}><span className="journey-step-number">{status[i]?<Check size={17}/>:String(i+1).padStart(2,"0")}</span><span><strong>{s.name}</strong><small>{s.output}</small></span>{w.cohort.week===i+1&&<em>이번 주</em>}</button>)}</nav>
-  <header className="journey-intro"><div><span className="journey-kicker">STEP 0{step} · 이번에 남길 것</span><h2>{spec.title}</h2><p>{spec.hint}</p></div><span className="journey-output">{spec.output}<small>{status[step-1]?"내 기록이 있어요 · 이어서 다듬기":"아래에서 시작하세요"}</small></span></header>
+  {step!==1&&<header className="journey-intro"><div><span className="journey-kicker">STEP 0{step} · 이번에 남길 것</span><h2>{spec.title}</h2><p>{spec.hint}</p></div><span className="journey-output">{spec.output}<small>{status[step-1]?"내 기록이 있어요 · 이어서 다듬기":"아래에서 시작하세요"}</small></span></header>}
   {ended&&<p className="journey-closed">종료된 기수입니다. 남긴 카드와 변화 과정을 둘러보세요.</p>}
   {step===1&&<>
-   <div className="journey-discovery">
-    <form className="journey-write" onSubmit={async e=>{e.preventDefault();if(await p.saveIdea({type:"createIdea",title:title.trim(),body:body.trim(),scope:privateNote?"owner":p.scope==="project"&&team?"project":"cohort",kind:"thought"})){setTitle("");setBody("");setSaved(true);}}}>
-     <span className="journey-card-label"><Pencil size={16}/> 내 생각 카드</span><h3>빈칸 두 개면 시작할 수 있어요.</h3>
-     <label htmlFor="journey-title">무슨 일이었나요?<input id="journey-title" value={title} onChange={e=>{setTitle(e.target.value);setSaved(false);}} maxLength={120} required placeholder="예: 모임에 처음 가면 누구에게 말을 걸지 모르겠어요" disabled={p.busy||ended}/></label>
-     <label htmlFor="journey-body">언제, 누구에게, 무엇이 불편했나요?<textarea id="journey-body" value={body} onChange={e=>setBody(e.target.value)} rows={4} maxLength={5000} required placeholder="어떤 상황이었는지, 지금은 어떻게 해결하는지 적어보세요. 해결 방법은 아직 없어도 괜찮아요." disabled={p.busy||ended}/></label>
-     <label className="journey-private"><input type="checkbox" checked={privateNote} onChange={e=>setPrivateNote(e.target.checked)} disabled={p.busy||ended}/><Lock size={13}/> 아직은 나만 볼게요</label>
-     <div className="journey-write-footer"><small>{privateNote?"나에게만 보이는 카드":p.scope==="project"&&team?"우리 팀 보드에 올라갑니다":"함께 보는 보드에 올라갑니다"}</small><button className="primary-button" disabled={p.busy||ended||!title.trim()||!body.trim()}><Plus size={16}/>{p.busy?"저장 중…":"카드 올리기"}</button></div>
-     {saved&&<p role="status" className="journey-saved">카드를 남겼어요. 아래 내 카드에서 ‘이 생각 구체화하기’를 눌러 다섯 질문에 답해보세요.</p>}
-    </form>
-    <aside className="journey-guide"><img src={characterFor(me).image} alt=""/><div><span>이렇게 이어가요</span><h3>생각 하나.<br/>질문 하나.<br/>더 구체적인 문제.</h3><ol><li>내가 겪은 일을 카드로 남겨요.</li><li>내 카드의 다섯 질문에 답해요.</li><li>동료 의견을 듣고 문제정의를 다듬어요.</li></ol><small>수정 전 생각과 바뀐 이유도 남습니다.</small><button className="secondary-button" onClick={()=>document.getElementById("idea-exhibition")?.scrollIntoView({block:"start",behavior:"smooth"})}>단계별 전시 보러가기 <ArrowRight size={14}/></button></div></aside>
-   </div>
+   <IdeaStart workspace={w} busy={p.busy} ended={!!ended} scope={p.scope} save={p.saveIdea} onIdea={p.onIdea} startRequest={p.startRequest} />
    {currentActivity&&<button className="journey-activity" onClick={()=>p.onNavigate("activities")}><span>진행자가 연 활동<strong>{currentActivity.data.question}</strong></span>활동에 답변하기 <ArrowRight size={17}/></button>}
    <div className="journey-board-heading"><div><h3>{p.scope==="project"?"우리 팀의 생각 보드":"함께 보는 생각 보드"}</h3><p>생각부터 문제정의까지 단계별로 펼쳐보고, 각 카드에 피드백을 남겨주세요.</p></div><button className="secondary-button" aria-pressed={mine} onClick={()=>setMine(!mine)}>{mine?"모두의 카드 보기":"내 카드만 보기"}</button></div>
    <IdeaExhibition workspace={w} ideas={cards} busy={p.busy} ended={!!ended} save={p.saveIdea} onIdea={p.onIdea} loadMore={p.loadMore}/>

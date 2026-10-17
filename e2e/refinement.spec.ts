@@ -6,7 +6,7 @@ test('a thought grows through five questions, two drafts, readiness and history'
  await page.getByRole('button',{name:'카드 올리기',exact:true}).click();
  const card=page.locator('.stage-thought .journey-note').filter({hasText:'첫 대화를 시작하기 어려워요'});
  await card.getByRole('button',{name:'이 생각 구체화하기'}).click();
- const editor=page.getByRole('region',{name:'생각 구체화와 문제정의'});
+ const editor=page.getByRole('dialog').getByRole('region',{name:'생각 구체화와 문제정의'});
  await editor.getByLabel('누가 겪나요?',{exact:true}).fill('모임에 처음 참석한 사람');
  await editor.getByRole('button',{name:'답변 임시 저장'}).click();
  await expect(editor.getByText('질문 답변을 저장했어요.',{exact:true})).toBeVisible();
@@ -35,7 +35,7 @@ test('a thought grows through five questions, two drafts, readiness and history'
 test('mobile owner can review solution wording and others read without edit access',async({page})=>{
  await page.setViewportSize({width:390,height:844});await page.goto('/preview');
  await page.getByRole('button',{name:/처음 온 사람도 편안한 커뮤니티/}).click();
- const editor=page.getByRole('region',{name:'생각 구체화와 문제정의'});
+ const editor=page.getByRole('dialog').getByRole('region',{name:'생각 구체화와 문제정의'});
  await editor.getByLabel('누가',{exact:true}).fill('AI 매칭 앱 사용자');
  await expect(editor.getByText(/해결 방법은 아직 열어두고/)).toBeVisible();
  await expect(editor.getByRole('button',{name:'선정 준비 완료',exact:true})).toBeDisabled();

@@ -2,6 +2,7 @@ import {test,expect} from '@playwright/test';
 test('idea, comment and revision remain connected',async({page})=>{
  await page.goto('/preview');
  await expect(page.getByText('샘플 미리보기 · 가상 참가자',{exact:false})).toBeVisible();
+ await page.getByRole('button',{name:'아이디어 보드',exact:true}).click();
  await page.getByRole('button',{name:'생각 남기기',exact:true}).first().click();
  let dialog=page.getByRole('dialog');
  await dialog.getByLabel('한 문장으로 표현하면').fill('처음 방문하는 사람을 위한 안내');

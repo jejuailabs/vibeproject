@@ -34,6 +34,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  const [data,setData]=useState<Workspace|null>(preview?previewWorkspace():null);
  const [user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(!preview),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [characterOpen,setCharacterOpen]=useState(false);
+ const [startRequest,setStartRequest]=useState(0);
  const [memberFilter,setMemberFilter]=useState<string|null>(null);
  const [workshopTab,setWorkshopTab]=useState<{id:string;revision:number;docKey?:DocKey;target?:string}|undefined>();
  const [space,setSpace]=useState<Space>('me'),[view,setView]=useState<View>('dashboard'),[query,setQuery]=useState(''),[filter,setFilter]=useState('all');
@@ -77,16 +78,16 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  useEffect(()=>{if(action&&!actionRef.current?.open)actionRef.current?.showModal();else if(!action)actionRef.current?.close();},[action]);
  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),4000);return()=>clearTimeout(timer);},[notice]);
  async function login(){setLoading(true);setError('');try{await signInWithPopup(clientAuth(),new GoogleAuthProvider());}catch{setError('로그인을 완료하지 못했습니다. Google 로그인 설정과 허용 도메인을 확인해주세요.');setLoading(false);}}
- async function run(command:Command):Promise<boolean>{
+ async function run(command:Command,onResult?:(result:{id?:string})=>void):Promise<boolean>{
   setBusy(true);setError('');
   try{
-   if(preview){if(data)setData(previewCommand(data,command));}
+   if(preview){if(data){const next=previewCommand(data,command);setData(next);onResult?.({id:command.type==='createIdea'?next.ideas[0]?.id:undefined});}}
    else{
     if(!user)throw new Error('로그인이 필요합니다.');
     const key=JSON.stringify(command);if(pending.current?.key!==key)pending.current={key,id:crypto.randomUUID()};
     const response=await fetch('/api/workspace',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await user.getIdToken()},body:JSON.stringify({cohortId,requestId:pending.current.id,command})});
     const value=await response.json();if(!response.ok)throw new Error(value.error||'저장하지 못했습니다.');
-    pending.current=null;await load(user);
+    pending.current=null;await load(user);onResult?.(value);
    }
    setNotice(preview?'샘플에 반영했어요. 새로고침하면 초기화됩니다.':'저장했어요.');return true;
   }catch(e){setError(e instanceof Error?e.message:'다시 시도해주세요.');return false;}finally{setBusy(false);}
@@ -134,8 +135,8 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  <header className="topbar"><button className="icon-button mobile-menu" onClick={()=>setMobileNav(v=>!v)} aria-label="메뉴 열기"><Menu size={22}/></button><div className="space-tabs">{([['me','내 공간'],['project','프로젝트 공간'],['cohort','전체 공간']] as const).map(([id,label])=><button key={id} className={space===id?'selected':''} onClick={()=>{setSpace(id);setFilter('all');setMemberFilter(null);}}>{label}</button>)}</div><div className="top-actions"><span className="cohort-status"><i/>WEEK {data.cohort.week} · 함께 만드는 중</span><button className="icon-button" onClick={()=>user?load(user).catch(e=>setError(e.message)):setNotice('미리보기는 현재 샘플 상태를 보여줍니다.')} aria-label="새로고침"><RefreshCw size={17}/></button><button className="icon-button" onClick={()=>setChatOpen(v=>!v)} aria-label="채팅 열기 또는 닫기"><MessageCircle size={19}/></button></div></header>
  <main className="main-content">
  {error&&<div className="error-banner" role="alert">{error}<button aria-label="오류 닫기" onClick={()=>setError('')}><X size={16}/></button></div>}
- <div className="page-heading"><div><span className="eyebrow">{view==='workshop'?'YOUR WORKSHOP / IN PLAY':view==='dashboard'?'MAKE SOMETHING MEANINGFUL':view==='ideas'?'IDEAS GROW TOGETHER':view==='projects'?'BETTER, TOGETHER':'EVERY STEP MATTERS'}</span><h1>{view==='workshop'?'워크숍 플레이북':view==='dashboard'?(space==='me'?me.name.split(' ')[0]+'님의 작업 공간':space==='project'?'우리의 프로젝트':'함께 만드는 가능성'):view==='ideas'?'아이디어 보드':view==='projects'?'프로젝트 둘러보기':'생각이 자라온 기록'}</h1><p>{view==='workshop'?'현장 활동부터 팀 구성, 개발과 발표까지 한 공간에서 진행하세요.':view==='dashboard'?'오늘의 작은 생각을, 다음 가능성으로 연결해보세요.':view==='ideas'?'서로의 시선이 더해지면, 작은 생각도 달라집니다.':view==='projects'?'서로 다른 생각이 모여 하나의 변화를 만듭니다.':'첫 생각부터 지금까지, 우리의 변화가 남아 있어요.'}</p></div><button className="primary-button" onClick={()=>openComposer()}><Plus size={17}/>생각 남기기</button></div>
- {view==='dashboard'&&<JourneyBoard key={me.id} workspace={data} {...workshop} busy={busy||workshop.busy} preview={preview} scope={space} saveIdea={run} loadMore={loadOlder} onIdea={id=>{setSelected(id);setComment('');}} onNavigate={(tab,docKey,target)=>{setWorkshopTab({id:tab,docKey,target,revision:Date.now()});navigate('workshop');if(!target)window.scrollTo({top:0});}}/>}
+ <div className="page-heading"><div><span className="eyebrow">{view==='workshop'?'YOUR WORKSHOP / IN PLAY':view==='dashboard'?'MAKE SOMETHING MEANINGFUL':view==='ideas'?'IDEAS GROW TOGETHER':view==='projects'?'BETTER, TOGETHER':'EVERY STEP MATTERS'}</span><h1>{view==='workshop'?'워크숍 플레이북':view==='dashboard'?(space==='me'?me.name.split(' ')[0]+'님의 작업 공간':space==='project'?'우리의 프로젝트':'함께 만드는 가능성'):view==='ideas'?'아이디어 보드':view==='projects'?'프로젝트 둘러보기':'생각이 자라온 기록'}</h1><p>{view==='workshop'?'현장 활동부터 팀 구성, 개발과 발표까지 한 공간에서 진행하세요.':view==='dashboard'?'오늘의 작은 생각을, 다음 가능성으로 연결해보세요.':view==='ideas'?'서로의 시선이 더해지면, 작은 생각도 달라집니다.':view==='projects'?'서로 다른 생각이 모여 하나의 변화를 만듭니다.':'첫 생각부터 지금까지, 우리의 변화가 남아 있어요.'}</p></div><button className="primary-button" onClick={()=>view==='dashboard'?setStartRequest(n=>n+1):openComposer()}><Plus size={17}/>생각 남기기</button></div>
+ {view==='dashboard'&&<JourneyBoard key={me.id} workspace={data} {...workshop} busy={busy||workshop.busy} preview={preview} scope={space} startRequest={startRequest} saveIdea={run} loadMore={loadOlder} onIdea={id=>{setSelected(id);setComment('');}} onNavigate={(tab,docKey,target)=>{setWorkshopTab({id:tab,docKey,target,revision:Date.now()});navigate('workshop');if(!target)window.scrollTo({top:0});}}/>}
  {view==='workshop'&&<button className="journey-back" onClick={()=>navigate('dashboard')}><ArrowLeft size={17}/> 어디서부터 시작할까요? 단계별 활동 보드로</button>}
  <ArenaProfile workspace={data} records={workshop.records} space={space} compact onCharacter={()=>{setError('');setCharacterOpen(true);}} onIdeas={()=>navigate('ideas')} onStage={tab=>{setWorkshopTab({id:tab,revision:Date.now()});navigate('workshop');}}/>
  {view==='workshop'&&<WorkshopHub workspace={data} {...workshop} preview={preview} requestedTab={workshopTab}/>}
