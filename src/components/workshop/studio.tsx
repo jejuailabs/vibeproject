@@ -166,7 +166,7 @@ function ProjectStudio({
               name: "markdown",
               label: "Markdown 문서",
               type: "area",
-              value: d?.data.markdown || (docKey==="product"&&w.ideas.find(i=>i.id===team.sourceIdeaId)?.refinement?problemMarkdown(w.ideas.find(i=>i.id===team.sourceIdeaId)!):templates[docKey]),
+              value: d?.data.markdown || (docKey==="product"&&w.ideas.find(i=>i.id===(team.confirmedProblem?.ideaId||team.sourceIdeaId))?.refinement?problemMarkdown(w.ideas.find(i=>i.id===(team.confirmedProblem?.ideaId||team.sourceIdeaId))!):templates[docKey]),
               max: 20000,
             },
             reason,

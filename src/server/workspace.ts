@@ -120,7 +120,8 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
    result={id:uid};
   } else if(command.type==='createIdea') {
    if(command.scope==='project' && !me.projectId) throw new DomainError('NO_PROJECT','먼저 프로젝트에 참여해주세요.',409);
-   if(command.scope!=='owner') {
+   // The cohort activity gates cohort-wide sharing only; team cards follow the project's own steps.
+   if(command.scope==='cohort') {
     const activity=await tx.get(c.collection('activities').doc('discovery'));
     if(activity.data()?.state!=='open'||activity.data()?.closesAt&&activity.data()?.closesAt<=now) throw new DomainError('CLOSED','현재 활동이 마감되었습니다. 나만 보기로 저장할 수 있습니다.',409);
    }

@@ -135,6 +135,13 @@ export const workshopCommand = z.discriminatedUnion("type", [
     invite: z.string().regex(/^[a-f0-9]{32}$/).optional(),
   }),
   S({
+    type: z.literal("confirmProblem"),
+    ...project,
+    ideaId: id,
+    revision,
+    reason,
+  }),
+  S({
     type: z.literal("projectAccess"),
     ...project,
     joinPolicy,

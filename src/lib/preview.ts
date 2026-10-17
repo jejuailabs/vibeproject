@@ -38,7 +38,7 @@ export function previewCommand(state:Workspace,command:Command):Workspace {
   if(!isCharacterId(command.avatarId))throw new Error('등록된 캐릭터를 선택해주세요.');
   next.me.avatar=command.avatarId;const member=next.members.find(m=>m.id===uid);if(member)member.avatar=command.avatarId;
  }else if(command.type==='createIdea'){
-  if(command.scope!=='owner' && next.activity.state==='closed')throw new Error('현재 활동이 마감되었습니다.');
+  if(command.scope==='cohort' && next.activity.state==='closed')throw new Error('현재 활동이 마감되었습니다.');
   if(command.scope==='project'&&!next.me.projectId)throw new Error('프로젝트에 먼저 참여해주세요.');
   const idea:Idea={id:uuid(),...command,ownerId:uid,projectId:command.scope==='project'?next.me.projectId:null,state:'shared',revision:1,version:1,createdAt:now,updatedAt:now};
   next.ideas.unshift(idea);record(idea,'첫 생각 공유','최초 작성');

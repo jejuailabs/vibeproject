@@ -1,6 +1,7 @@
 import type { Context } from "./model";
 import type { WorkshopCommand } from "./commands";
 import type { Project } from "../types";
+import { statement } from "../refinement";
 import {
   fail,
   path,
@@ -11,6 +12,9 @@ import {
   saveProject,
   joinMembership,
   activateMembership,
+  project,
+  idea,
+  ideaHistory,
 } from "./core";
 
 // Join passwords live outside projects/projectDirectory so no client response ever carries the hash.
@@ -155,6 +159,37 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       addMember(c, p, "member");
       event(c, "프로젝트 참여", cmd.invite ? "초대 링크" : policy === "password" ? "비밀번호" : "공개 참여", p.id, p.id);
       notify(c, p.leaderId, "새 팀원이 프로젝트에 참여했습니다.", p.id, "project");
+      return { id: p.id };
+    }
+    case "confirmProblem": {
+      const p = await project(c, cmd.projectId, "leader");
+      const i = await idea(c, cmd.ideaId);
+      if (i.projectId !== p.id && i.id !== p.sourceIdeaId)
+        fail("이 프로젝트에 올린 카드만 확정할 수 있습니다.");
+      if (i.revision !== cmd.revision)
+        fail("작성자가 카드를 먼저 고쳤습니다. 최신 내용을 확인한 뒤 확정해주세요.");
+      if (!i.refinement?.draft) fail("문제정의 초안을 저장한 카드만 확정할 수 있습니다.");
+      const text = statement(i.refinement);
+      saveProject(c, {
+        ...p,
+        problem: text,
+        // Keep the original source card; planning reads the confirmed card first.
+        sourceIdeaId: p.sourceIdeaId || i.id,
+        confirmedProblem: {
+          ideaId: i.id,
+          ownerId: i.ownerId,
+          revision: i.revision,
+          draft: i.refinement.draft,
+          statement: text,
+          reason: cmd.reason,
+          confirmedBy: c.uid,
+          confirmedAt: c.now,
+        },
+      });
+      ideaHistory(c, i, "프로젝트 문제로 확정", cmd.reason);
+      event(c, "문제 확정", text, p.id, p.id);
+      for (const uid of p.memberIds)
+        if (uid !== c.uid) notify(c, uid, "리더가 프로젝트 문제를 확정했습니다.", p.id, "project");
       return { id: p.id };
     }
     case "projectAccess": {

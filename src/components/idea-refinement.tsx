@@ -6,7 +6,7 @@ export function RefinementSummary({value}:{value?:Refinement}){
  if(!value)return null;
  return <details className="refinement-summary"><summary>질문 답변·문제정의 {value.draft?`초안 ${value.draft}`:''}{value.ready?' · 선정 준비':''}</summary><pre>{refinementText(value)}</pre></details>;
 }
-export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePanel,onPanelChange}:{idea:Idea;editable:boolean;hasProject:boolean;busy:boolean;error?:string;run:(c:Command)=>Promise<boolean>;activePanel?:'questions'|'definition';onPanelChange?:(panel:'questions'|'definition')=>void}){
+export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePanel,onPanelChange,teamOnly}:{idea:Idea;editable:boolean;hasProject:boolean;busy:boolean;error?:string;run:(c:Command)=>Promise<boolean>;activePanel?:'questions'|'definition';onPanelChange?:(panel:'questions'|'definition')=>void;teamOnly?:boolean}){
  const [value,setValue]=useState<Refinement>(()=>structuredClone(idea.refinement||emptyRefinement()));
  const [base,setBase]=useState(idea.revision),[scope,setScope]=useState<Scope>(idea.scope);
  const [localPanel,setLocalPanel]=useState<'questions'|'definition'>(answered(idea.refinement)===5?'definition':'questions');
@@ -42,10 +42,10 @@ export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePa
     {hint&&<p className="refinement-hint" role="status">앱·기능을 미리 정한 표현이 있는지 살펴보세요. 해결 방법은 아직 열어두고, 사람이 겪는 어려움으로 표현해주세요. 초안은 저장할 수 있습니다.</p>}
     <label className="refinement-check"><input type="checkbox" checked={value.definition.solutionReviewed} onChange={e=>setValue({...value,definition:{...value.definition,solutionReviewed:e.target.checked}})}/>문장에 앱 이름이나 만들 기능을 넣어 해결책을 미리 정하지 않았는지 확인했습니다.</label>
    </>}
-   <label>공개 범위<select aria-label="공개 범위" value={scope} onChange={e=>setScope(e.target.value as Scope)}><option value="owner">나만 보기</option><option value="cohort">기수 전체 · 선정에 참여</option><option value="project" disabled={!hasProject}>우리 팀</option></select><small>공개 범위를 바꾸면 이전 질문 답변·초안·댓글도 같은 범위에 공개됩니다.</small></label>
+   {!teamOnly&&<label>공개 범위<select aria-label="공개 범위" value={scope} onChange={e=>setScope(e.target.value as Scope)}><option value="owner">나만 보기</option><option value="cohort">기수 전체 · 선정에 참여</option><option value="project" disabled={!hasProject}>우리 팀</option></select><small>공개 범위를 바꾸면 이전 질문 답변·초안·댓글도 같은 범위에 공개됩니다.</small></label>}
    <label>무엇 때문에 바꿨나요?<input maxLength={120} value={reason} required={!!idea.refinement} placeholder={idea.refinement?'동료 의견, 새로 확인한 경험, 범위를 좁힌 이유 등':'첫 저장은 비워도 됩니다.'} onChange={e=>setReason(e.target.value)}/></label>
    <div className="refinement-buttons"><button className="secondary-button" type="submit" disabled={busy||conflict||!!idea.refinement&&!reason.trim()}>{panel==='questions'?'답변 임시 저장':'초안 저장'}</button>{panel==='questions'?<button className="primary-button" type="button" disabled={!complete||busy||conflict||!!idea.refinement&&!reason.trim()} onClick={()=>save('questions',false,true)}>저장하고 문제정의로</button>:<button className="primary-button" type="button" disabled={!complete||!definitionComplete||busy||conflict||!!idea.refinement&&!reason.trim()} onClick={()=>save('definition',true)}>선정 준비 완료</button>}</div>
-   {panel==='definition'&&scope!=='cohort'&&<p className="refinement-hint">투표에 참여하려면 공개 범위를 ‘기수 전체’로 바꿔주세요.</p>}
+   {panel==='definition'&&scope!=='cohort'&&!teamOnly&&<p className="refinement-hint">투표에 참여하려면 공개 범위를 ‘기수 전체’로 바꿔주세요.</p>}
    </fieldset>
   </form>
   {error&&<p role="alert" className="refinement-conflict">{error}</p>}
