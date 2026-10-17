@@ -1,3 +1,4 @@
+import {assertProblemReady,statement} from '../refinement';
 import type { Context, RecordOf } from "./model";
 import type { WorkshopCommand } from "./commands";
 import type { Idea, Member, Project } from "../types";
@@ -30,6 +31,8 @@ async function makeProject(
   reason: string,
   suffix = "",
 ) {
+  // Already frozen rounds created before refinement existed keep their original selection path.
+  if(!(source.state==="candidate"&&!source.refinement))assertProblemReady(source);
   const owner = await member(c, source.ownerId);
   if (owner.projectId) fail("제안자가 이미 다른 프로젝트에 참여하고 있습니다.");
   const settings = await optional(c, "settings", "settings");
@@ -41,7 +44,7 @@ async function makeProject(
   const p: Project = {
     id,
     name,
-    problem: source.title,
+    problem: source.refinement?.ready?statement(source.refinement):source.title,
     leaderId: owner.id,
     memberIds: [owner.id],
     sourceIdeaId: source.id,
@@ -109,6 +112,7 @@ export async function voting(
       for (const i of sources)
         if (i.scope !== "cohort" || i.state !== "shared")
           fail("전체에 공유 중인 아이디어만 후보로 지정할 수 있습니다.");
+      for(const i of sources)assertProblemReady(i);
       const id = "round-" + c.requestId;
       write(c, id, "round", {
         title: cmd.title,
@@ -122,6 +126,7 @@ export async function voting(
           title: i.title,
           body: i.body,
           ownerId: i.ownerId,
+          ...(i.refinement?{refinement:i.refinement}:{}),
         })),
         counts: {},
         reason: "",

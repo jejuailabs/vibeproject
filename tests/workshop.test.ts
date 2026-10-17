@@ -382,6 +382,9 @@ test("proposals require actual evidence, approve once, and redaction hides deriv
     body: "Build a guide",
   });
   assert.equal(s.workspace.ideas.length, 4);
+  const derived=s.workspace.ideas.find(i=>i.sourceId==='s1')!;
+  derived.refinement=structuredClone(previewWorkspace().ideas[0].refinement!);
+
   s = await run(s, {
     type: "redactSource",
     sourceId: "s1",
@@ -391,6 +394,7 @@ test("proposals require actual evidence, approve once, and redaction hides deriv
     s.workspace.ideas.find((i) => i.sourceId === "s1")!.state,
     "closed_unselected",
   );
+  assert.equal(s.workspace.ideas.find(i=>i.sourceId==='s1')?.refinement?.definition.who,'');
   assert.equal(
     (s.records.find((r) => r.id === proposal.id) as RecordOf<"proposal">).data
       .evidence,

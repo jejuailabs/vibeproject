@@ -1,4 +1,5 @@
 "use client";
+import {problemMarkdown} from '@/lib/refinement';
 import { useState, useEffect } from "react";
 import {
   docKeys,
@@ -165,7 +166,7 @@ function ProjectStudio({
               name: "markdown",
               label: "Markdown 문서",
               type: "area",
-              value: d?.data.markdown || templates[docKey],
+              value: d?.data.markdown || (docKey==="product"&&w.ideas.find(i=>i.id===team.sourceIdeaId)?.refinement?problemMarkdown(w.ideas.find(i=>i.id===team.sourceIdeaId)!):templates[docKey]),
               max: 20000,
             },
             reason,

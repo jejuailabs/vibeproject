@@ -1,9 +1,10 @@
+import {previewWorkspace} from '../src/lib/preview';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { canReadIdea, assertEditable, assertChannel, validateSelection } from '../src/lib/policy';
 import type {Idea,Member} from '../src/lib/types';
 const member:Member={id:'a',name:'A',avatar:'',role:'participant',projectId:'p1',active:true};
-const idea:Idea={id:'i',title:'idea',body:'body',kind:'thought',ownerId:'a',scope:'owner',projectId:null,state:'shared',revision:2,version:2,createdAt:'',updatedAt:''};
+const idea:Idea={refinement:previewWorkspace().ideas[0].refinement,id:'i',title:'idea',body:'body',kind:'thought',ownerId:'a',scope:'owner',projectId:null,state:'shared',revision:2,version:2,createdAt:'',updatedAt:''};
 test('private thoughts stay private even for cohort administrators',()=>{
  assert.equal(canReadIdea(member,idea),true);
  assert.equal(canReadIdea({...member,id:'admin',role:'admin'},idea),false);

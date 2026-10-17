@@ -130,3 +130,8 @@ Storage 경로: cohorts/{c}/assets/{assetId}/original.
 접근 확인된 서버 다운로드 또는 적절한 인증 다운로드 경로를 사용한다.
 MIME/확장자/크기 검사, 허용 목록, HTML/SVG 실행 차단, Markdown 정화.
 원본 파일/버전/내보내기는 같은 공개 범위 정책과 보관 정책을 적용한다.
+
+
+## 2026-10-17 문제정의 과정 추가
+
+[생각 구체화·문제정의](problem-definition.md)의 다섯 질문, 초안 버전, 통제범위, 선정 준비 및 공개 범위를 적용한다. Idea.refinement와 이력 snapshot.refinement가 같은 카드의 발전 과정을 담는다. 신규 투표는 준비된 문제정의를 고정하며, 선정한 문장이 프로젝트 기획의 출발점이 된다.

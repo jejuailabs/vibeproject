@@ -22,8 +22,8 @@ export async function GET(request:Request) {
 export async function POST(request:Request) {
  try {
   const user=await authenticatedUid(request);if(!user) return NextResponse.json({error:'Google 로그인이 필요합니다.'},{status:401});
-  if(Number(request.headers.get('content-length')||0)>30000) return NextResponse.json({error:'요청이 너무 큽니다.'},{status:413});
-  const raw=await request.text();if(raw.length>30000)return NextResponse.json({error:'요청이 너무 큽니다.'},{status:413});
+  if(Number(request.headers.get('content-length')||0)>50000) return NextResponse.json({error:'요청이 너무 큽니다.'},{status:413});
+  const raw=await request.text();if(raw.length>50000)return NextResponse.json({error:'요청이 너무 큽니다.'},{status:413});
   let parsed;try{parsed=JSON.parse(raw);}catch{return NextResponse.json({error:'잘못된 요청입니다.'},{status:400});}
   const data=envelopeSchema.parse(parsed);
   return NextResponse.json(await runCommand(data.cohortId,user.uid,data.requestId,data.command));

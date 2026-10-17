@@ -1,3 +1,4 @@
+import {emptyRefinement} from '../refinement';
 import type { Context, RecordOf, Scope } from "./model";
 import type { WorkshopCommand } from "./commands";
 import type { Member, Message, Idea } from "../types";
@@ -530,6 +531,7 @@ export async function operations(
             if (i) {
               c.store.write(path(c, "ideas/" + i.id), {
                 ...i,
+                refinement: emptyRefinement(),
                 title: "원본 정정으로 숨겨진 생각",
                 body: "원본 작성자의 정정 요청으로 내용을 숨겼습니다.",
                 state: "closed_unselected",
@@ -574,6 +576,7 @@ export async function operations(
                         candidate.ideaId === i.id
                           ? {
                               ...candidate,
+                              refinement: emptyRefinement(),
                               title: "정정된 후보",
                               body: "원문 정정으로 내용을 숨겼습니다.",
                             }
@@ -595,6 +598,7 @@ export async function operations(
                   path(c, "ideas/" + i.id + "/history/" + h.id),
                   {
                     snapshot: {
+                      refinement: emptyRefinement(),
                       title: "정정된 내용",
                       body: "원본 정정으로 비공개 처리됨",
                       scope: i.scope,

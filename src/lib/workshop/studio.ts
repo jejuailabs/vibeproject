@@ -1,7 +1,7 @@
 import type { Context, RecordOf, DocKey } from "./model";
 import { docKeys, docNames, readinessItems, stages, stageNames } from "./model";
 import type { WorkshopCommand } from "./commands";
-import type { Message } from "../types";
+import type { Idea, Message } from "../types";
 import {
   admin,
   fail,
@@ -34,9 +34,15 @@ export async function studio(
 ): Promise<{ id: string } | null> {
   switch (cmd.type) {
     case "document": {
-      await editableProject(c, cmd.projectId);
+      const team = await editableProject(c, cmd.projectId);
       const id = "doc-" + cmd.projectId + "-" + cmd.key,
         old = await optional(c, id, "document");
+      const sourceIdea=cmd.key==="product"?await c.store.read<Idea>(path(c,"ideas/"+team.sourceIdeaId)):undefined;
+      const sourceId=old?.data.sourceId||(sourceIdea?.refinement?sourceIdea.sourceId:undefined);
+      if(sourceId){
+        const source=await optional(c,sourceId,"source");
+        if(source?.data.redacted)fail("출발 원문이 정정되어 이 문서의 저장이 중지되었습니다.");
+      }
       revision(old, cmd.revision);
       write(
         c,
@@ -48,7 +54,7 @@ export async function studio(
           markdown: cmd.markdown,
           documentRevision: (old?.revision || 0) + 1,
           reason: cmd.reason,
-          ...(old?.data.sourceId ? { sourceId: old.data.sourceId } : {}),
+          ...(sourceId ? { sourceId } : {}),
         },
         "project",
         cmd.projectId,
@@ -62,7 +68,7 @@ export async function studio(
           title: docNames[cmd.key],
           markdown: cmd.markdown,
           reason: cmd.reason,
-          ...(old?.data.sourceId ? { sourceId: old.data.sourceId } : {}),
+          ...(sourceId ? { sourceId } : {}),
         },
         "project",
         cmd.projectId,

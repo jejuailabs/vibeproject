@@ -1,3 +1,4 @@
+import {refinementInputSchema,nextRefinement,statement} from '@/lib/refinement';
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { db } from './firebase';
@@ -11,6 +12,7 @@ const short = z.string().trim().min(1).max(120);
 const body = z.string().trim().min(1).max(5000);
 const commandSchema = z.discriminatedUnion('type', [
  z.object({ type: z.literal('createIdea'), title: short, body, kind: z.enum(['thought','question','progress']), scope: z.enum(['owner','project','cohort']) }),
+ z.object({type:z.literal('refineIdea'),id,revision:z.number().int().nonnegative(),phase:z.enum(['questions','definition']),input:refinementInputSchema,reason:short,scope:z.enum(['owner','project','cohort'])}),
  z.object({ type: z.literal('editIdea'), id, revision: z.number().int().nonnegative(), title: short, body, reason: short }),
  z.object({ type: z.literal('comment'), ideaId: id, body }),
  z.object({ type: z.literal('sendMessage'), channel: id, body: body.max(2000) }),
@@ -109,7 +111,7 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
   const history=(idea:Idea,title:string,reason:string) => {
    const ref=c.collection('ideas').doc(idea.id).collection('history').doc();
    tx.create(ref,{id:ref.id,ideaId:idea.id,title,reason,actorId:uid,createdAt:now,revision:idea.revision,
-    snapshot:{title:idea.title,body:idea.body,scope:idea.scope,state:idea.state}});
+    snapshot:{title:idea.title,body:idea.body,scope:idea.scope,state:idea.state,...(idea.refinement?{refinement:idea.refinement}:{})}});
   };
   if(command.type==='setAvatar') {
    tx.update(memberRef,{avatar:command.avatarId,updatedAt:now});
@@ -141,7 +143,7 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
    if(linked&&linkedSnap?.exists)tx.update(linked,{'data.state':command.state,revision:(linkedSnap.data()?.revision||0)+1,updatedAt:now});
    tx.update(ref,{state:command.state,updatedAt:now,updatedBy:uid});
   } else {
-   const ideaId=command.type==='editIdea'?command.id:command.ideaId;
+   const ideaId=(command.type==='editIdea'||command.type==='refineIdea')?command.id:command.ideaId;
    const ref=c.collection('ideas').doc(ideaId), snap=await tx.get(ref);
    if(!snap.exists) throw new DomainError('NOT_FOUND','아이디어를 찾을 수 없습니다.',404);
    const idea={...snap.data(),id:ideaId} as Idea; assertCanRead(me,idea);
@@ -149,9 +151,19 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
     if(idea.state==='closed_unselected') throw new DomainError('LOCKED','종료된 아이디어는 읽기 전용입니다.',409);
     const comment=ref.collection('comments').doc();
     tx.create(comment,{id:comment.id,ideaId,authorId:uid,body:command.body,createdAt:now});result={id:comment.id};
+   } else if(command.type==='refineIdea') {
+    assertEditable(me,idea,command.revision);
+    if(command.scope==='project'&&!me.projectId)throw new DomainError('NO_PROJECT','프로젝트에 먼저 참여해주세요.',409);
+    if(command.scope!==idea.scope&&command.scope!=='owner'){
+     const activity=await tx.get(c.collection('activities').doc('discovery'));
+     if(activity.data()?.state!=='open'||activity.data()?.closesAt&&activity.data()?.closesAt<=now)throw new DomainError('CLOSED','현재 활동이 마감되어 공유 범위를 바꿀 수 없습니다.',409);
+    }
+    const refinement=nextRefinement(idea,command.phase,command.input,command.reason);
+    const next={...idea,refinement,scope:command.scope,projectId:command.scope==='project'?me.projectId:null,revision:idea.revision+1,version:idea.version+1,updatedAt:now};
+    tx.update(ref,next);history(next,command.phase==='questions'?'다섯 질문으로 경험 구체화':'문제정의 초안 '+refinement.draft+(refinement.ready?' · 선정 준비':''),command.reason);result={id:ideaId};
    } else if(command.type==='editIdea') {
     assertEditable(me,idea,command.revision);
-    const next={...idea,title:command.title,body:command.body,revision:idea.revision+1,version:idea.version+1,updatedAt:now};
+    const next={...idea,...(idea.refinement?{refinement:{...idea.refinement,ready:false,definition:{...idea.refinement.definition,solutionReviewed:false}}}:{}),title:command.title,body:command.body,revision:idea.revision+1,version:idea.version+1,updatedAt:now};
     tx.update(ref,next);history(next,'생각을 구체화했어요',command.reason);result={id:ideaId};
    } else if(command.type==='closeIdea') {
     assertAdmin(me);assertRevision(idea,command.revision);
@@ -165,7 +177,7 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
     validateSelection(me,idea,command.revision,owner);
     if(settings.data()?.data?.mode==='solo')throw new DomainError('MODE','개인 프로젝트는 워크숍 진행 메뉴에서 시작해주세요.',409);
     const projectRef=c.collection('projects').doc();
-    const project:Project={id:projectRef.id,name:command.projectName,problem:idea.title,leaderId:owner.id,memberIds:[owner.id],sourceIdeaId:idea.id,stage:'기획 중',createdAt:now};
+    const project:Project={id:projectRef.id,name:command.projectName,problem:idea.refinement?.ready?statement(idea.refinement):idea.title,leaderId:owner.id,memberIds:[owner.id],sourceIdeaId:idea.id,stage:'기획 중',createdAt:now};
     tx.create(projectRef,project);tx.create(c.collection('projectDirectory').doc(projectRef.id),project);
     tx.create(projectRef.collection('members').doc(owner.id),{role:'leader',status:'active',acceptedAt:now});
     tx.update(ownerRef,{projectId:projectRef.id});tx.update(c.collection('profiles').doc(owner.id),{projectId:projectRef.id});

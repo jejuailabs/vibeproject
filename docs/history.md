@@ -75,3 +75,8 @@ release.created, feedback.applied, project.completed, content.redacted.
 일반 운영에서는 soft-delete/tombstone으로 연결성을 유지한다.
 민감 정보가 잘못 입력되었거나 삭제 의무가 있는 경우 권한 있는 정정 절차가 본문·버전·파일·색인·파생 요약을 제거/비식별화한다. 사건에는 본문 없이 정정 사실만 남긴다.
 백업과 내보낸 파일의 보관/삭제 범위는 운영 정책에 명시한다.
+
+
+## 2026-10-17 문제정의 과정 추가
+
+[생각 구체화·문제정의](problem-definition.md)의 다섯 질문, 초안 버전, 통제범위, 선정 준비 및 공개 범위를 적용한다. Idea.refinement와 이력 snapshot.refinement가 같은 카드의 발전 과정을 담는다. 신규 투표는 준비된 문제정의를 고정하며, 선정한 문장이 프로젝트 기획의 출발점이 된다.

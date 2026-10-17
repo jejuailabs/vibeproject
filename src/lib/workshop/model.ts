@@ -70,6 +70,7 @@ export type VoteData = {
   closesAt: string;
   candidates: {
     ideaId: string;
+    refinement?: import("../refinement").Refinement;
     revision: number;
     title: string;
     body: string;

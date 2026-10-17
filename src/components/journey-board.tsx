@@ -1,4 +1,5 @@
 "use client";
+import {refinementLabel,refinementAction,statement} from '@/lib/refinement';
 import {useState} from "react";
 import {ArrowRight, Check, MessageCircle, Plus, Pencil, Lock, ArrowUpRight} from "lucide-react";
 import {canReadIdea} from "@/lib/policy";
@@ -7,7 +8,7 @@ import {docKeys, docNames, type DocKey} from "@/lib/workshop/model";
 import {recordsOf, type Props} from "./workshop/common";
 import type {Command} from "@/lib/types";
 const steps = [
- {name:"생각 꺼내기", output:"내가 겪은 불편 카드", title:"어떤 순간이 불편했나요?", hint:"잘 정리하지 않아도 괜찮아요. 직접 겪은 일 하나부터 적어보세요."},
+ {name:"생각 꺼내기", output:"경험을 구체화한 문제정의카드", title:"어떤 순간이 불편했나요?", hint:"잘 정리하지 않아도 괜찮아요. 직접 겪은 일 하나부터 적어보세요."},
  {name:"함께할 문제 고르기", output:"선택한 문제와 내 프로젝트", title:"어떤 문제를 함께 풀고 싶나요?", hint:"카드를 읽고 투표한 뒤, 직접 만들거나 함께할 프로젝트를 선택하세요."},
  {name:"만들고 고치기", output:"기획 문서와 실행 주소", title:"우리의 생각을 어떻게 만들까요?", hint:"기획을 한 장씩 정리하고, 작은 기능부터 만들어 실행 주소를 남기세요."},
  {name:"결과 나누기", output:"시연과 달라진 생각", title:"처음 생각에서 무엇이 달라졌나요?", hint:"만든 것을 보여주고, 바뀐 생각과 다음에 해볼 일을 남겨주세요."},
@@ -20,7 +21,7 @@ export function JourneyBoard(p:BoardProps){
  const spec=steps[step-1],myIdeas=w.ideas.filter(x=>x.ownerId===me.id&&x.kind==="thought"),docs=recordsOf(p,"document").filter(x=>x.projectId===team?.id&&!x.data.redacted),baselines=recordsOf(p,"baseline").filter(x=>x.projectId===team?.id),releases=recordsOf(p,"release").filter(x=>x.projectId===team?.id),showcase=recordsOf(p,"showcase").find(x=>x.projectId===team?.id);
  const leader=team?.leaderId===me.id;
  const hasDoc=(key:DocKey)=>docs.find(x=>x.data.key===key&&x.data.markdown.trim());
- const status=[myIdeas.length>0,!!team,baselines.length>0&&releases.length>0,showcase?.data.state==="published"];
+ const status=[myIdeas.some(i=>i.refinement?.ready),!!team,baselines.length>0&&releases.length>0,showcase?.data.state==="published"];
  const ended=recordsOf(p,"settings")[0]?.data.state==="completed";
  const currentActivity=recordsOf(p,"activity").find(x=>x.data.featured&&x.data.state==="open");
  const cards=w.ideas.filter(x=>canReadIdea(me,x)&&(!mine||x.ownerId===me.id)&&(p.scope!=="project"||(!!team&&(x.projectId===team.id||x.id===team.sourceIdeaId)))).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));
@@ -37,19 +38,19 @@ export function JourneyBoard(p:BoardProps){
      <label htmlFor="journey-body">언제, 누구에게, 무엇이 불편했나요?<textarea id="journey-body" value={body} onChange={e=>setBody(e.target.value)} rows={4} maxLength={5000} required placeholder="어떤 상황이었는지, 지금은 어떻게 해결하는지 적어보세요. 해결 방법은 아직 없어도 괜찮아요." disabled={p.busy||ended}/></label>
      <label className="journey-private"><input type="checkbox" checked={privateNote} onChange={e=>setPrivateNote(e.target.checked)} disabled={p.busy||ended}/><Lock size={13}/> 아직은 나만 볼게요</label>
      <div className="journey-write-footer"><small>{privateNote?"나에게만 보이는 카드":p.scope==="project"&&team?"우리 팀 보드에 올라갑니다":"함께 보는 보드에 올라갑니다"}</small><button className="primary-button" disabled={p.busy||ended||!title.trim()||!body.trim()}><Plus size={16}/>{p.busy?"저장 중…":"카드 올리기"}</button></div>
-     {saved&&<p role="status" className="journey-saved">카드를 남겼어요. 아래에서 확인하고 동료의 카드에도 질문을 남겨보세요.</p>}
+     {saved&&<p role="status" className="journey-saved">카드를 남겼어요. 아래 내 카드에서 ‘이 생각 구체화하기’를 눌러 다섯 질문에 답해보세요.</p>}
     </form>
-    <aside className="journey-guide"><img src={characterFor(me).image} alt=""/><div><span>이렇게 이어가요</span><h3>생각 하나.<br/>질문 하나.<br/>더 구체적인 문제.</h3><ol><li>내가 겪은 일을 카드로 남겨요.</li><li>동료의 카드를 눌러 질문해요.</li><li>의견을 보고 내 생각을 다듬어요.</li></ol><small>수정 전 생각과 바뀐 이유도 남습니다.</small></div></aside>
+    <aside className="journey-guide"><img src={characterFor(me).image} alt=""/><div><span>이렇게 이어가요</span><h3>생각 하나.<br/>질문 하나.<br/>더 구체적인 문제.</h3><ol><li>내가 겪은 일을 카드로 남겨요.</li><li>내 카드의 다섯 질문에 답해요.</li><li>동료 의견을 듣고 문제정의를 다듬어요.</li></ol><small>수정 전 생각과 바뀐 이유도 남습니다.</small></div></aside>
    </div>
    {currentActivity&&<button className="journey-activity" onClick={()=>p.onNavigate("activities")}><span>진행자가 연 활동<strong>{currentActivity.data.question}</strong></span>활동에 답변하기 <ArrowRight size={17}/></button>}
    <div className="journey-board-heading"><div><h3>{p.scope==="project"?"우리 팀의 생각 보드":"함께 보는 생각 보드"}</h3><p>카드를 누르면 의견을 나누고, 내 카드는 수정할 수 있어요.</p></div><button className="secondary-button" aria-pressed={mine} onClick={()=>setMine(!mine)}>{mine?"모두의 카드 보기":"내 카드만 보기"}</button></div>
    <div className="journey-wall">{cards.map((idea,i)=><article className={"journey-note note-"+(i%4)+(idea.state==="closed_unselected"?" is-closed":"")} key={idea.id}>
     <div className="journey-note-author"><img src={characterFor(w.members.find(m=>m.id===idea.ownerId)).thumbnail} alt=""/><strong>{w.members.find(m=>m.id===idea.ownerId)?.name||"참가자"}</strong><small>{idea.scope==="owner"?"나만 보기":idea.scope==="project"?"팀 공유":"전체 공유"}</small></div>
-    <button className="journey-note-content" onClick={()=>p.onIdea(idea.id)}><h4>{idea.title}</h4><p>{idea.body}</p></button>
+    <button className="journey-note-content" onClick={()=>p.onIdea(idea.id)}><h4>{idea.title}</h4><p>{idea.refinement?.draft?statement(idea.refinement):idea.body}</p></button><div className="journey-refinement-state"><span>{refinementLabel(idea)}{idea.refinement?.draft?` · 초안 ${idea.refinement.draft}`:""}</span><button onClick={()=>p.onIdea(idea.id)}>{idea.ownerId===me.id?refinementAction(idea):"경험·문제정의 보기"}<ArrowRight size={13}/></button></div>
     <footer><button onClick={()=>p.onIdea(idea.id)}><MessageCircle size={15}/> 의견 {w.comments.filter(c=>c.ideaId===idea.id).length}</button><span>{idea.state==="selected"?"프로젝트로 연결":idea.state==="closed_unselected"?"종료 보관":idea.state==="candidate"?"투표 중":"함께 다듬는 중"} · r{idea.revision}</span></footer>
    </article>)}</div>
    {!cards.length&&<p className="journey-empty">{p.scope==="project"&&!team?"아직 참여한 프로젝트가 없어요. 전체 공간에서 생각을 나누거나 2단계에서 프로젝트를 선택하세요.":"아직 카드가 없어요. 위 입력칸에서 첫 생각을 남겨주세요."}</p>}
-   <div className="journey-next"><span>{myIdeas.length?"내 생각을 남겼다면, 다음엔 함께 풀 문제를 골라요.":"먼저 내 생각 카드 하나를 남겨보세요."}</span><button onClick={()=>go(2)}>다음 단계 살펴보기 <ArrowRight size={16}/></button></div>
+   <div className="journey-next"><span>{myIdeas.length?"다섯 질문과 문제정의를 다듬었다면, 함께 풀 문제를 골라요.":"먼저 내 생각 카드 하나를 남겨보세요."}</span><button onClick={()=>go(2)}>다음 단계 살펴보기 <ArrowRight size={16}/></button></div>
   </>}
   {step===2&&<>
    <div className="journey-action-grid"><ActionCard number="01" title="함께 풀 문제에 투표" hint="후보 카드를 읽고 마음이 가는 문제를 선택하세요." button="후보 보고 투표하기" onClick={()=>p.onNavigate("votes")}/><ActionCard number="02" title={team?"내 프로젝트가 정해졌어요":"개인으로 만들거나 팀에 합류"} hint={team?team.name+" · "+team.memberIds.length+"명과 함께 진행 중":"혼자 진행해도 같은 프로젝트 공간을 사용합니다."} button={team?"팀 구성 확인하기":"프로젝트 선택하기"} onClick={()=>p.onNavigate("votes")}/></div>

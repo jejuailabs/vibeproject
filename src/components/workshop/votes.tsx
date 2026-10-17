@@ -1,4 +1,6 @@
 "use client";
+import {statement} from '@/lib/refinement';
+import {RefinementSummary} from '../idea-refinement';
 import {
   Action,
   Box,
@@ -18,13 +20,13 @@ export function Votes(p: Props) {
     rounds = recordsOf(p, "round"),
     own = w.projects.find((x) => x.id === w.me.projectId);
   const available = w.ideas.filter(
-    (i) => i.scope === "cohort" && i.state === "shared",
+    (i) => i.scope === "cohort" && i.state === "shared" && i.refinement?.ready===true,
   );
   return (
     <>
       <Box id="vote-rounds" title="어떤 문제에 함께 도전할까요?" eyebrow="VOTE & FORM A SQUAD">
         <p>
-          후보는 투표 시작 시점의 내용으로 고정됩니다. 투표는 비공개로 저장하고,
+          전체 공유한 카드 중 문제정의의 선정 준비를 완료한 카드가 후보로 표시됩니다. 후보는 투표 시작 시점의 내용으로 고정됩니다. 투표는 비공개로 저장하고,
           마감 후 후보별 합계를 공개합니다.
         </p>
         {admin && (
@@ -88,7 +90,7 @@ export function Votes(p: Props) {
                 {r.data.candidates.map((c) => (
                   <div className="wk-note" key={c.ideaId}>
                     <h4>{c.title}</h4>
-                    <p>{c.body}</p>
+                    <p>{c.refinement?statement(c.refinement):c.body}</p><RefinementSummary value={c.refinement}/>
                     <small>고정된 원본 r{c.revision}</small>
                     {r.data.state !== "open" && (
                       <strong className="wk-votes">
