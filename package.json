@@ -12,6 +12,7 @@
     "test:e2e": "playwright test",
     "test:enrollment": "node --env-file=.env.local --conditions=react-server --import tsx tests/enrollment.integration.ts",
     "test:integration": "node --env-file=.env.local --conditions=react-server --import tsx tests/workshop.integration.ts",
+    "test:projects": "node --env-file=.env.local --conditions=react-server --import tsx tests/projects.integration.ts",
     "migrate:workshop": "node --env-file=.env.local --conditions=react-server --import tsx scripts/migrate-workshop.ts"
   },
   "dependencies": {
