@@ -298,6 +298,7 @@ export async function operations(
           title: cmd.title,
           text: cmd.text,
           sourceType: cmd.sourceType,
+          ...((cmd.step || old?.data.step) && cmd.projectId ? { step: cmd.step || old?.data.step } : {}),
           consent: cmd.consent,
           redacted: false,
         },
@@ -733,6 +734,7 @@ export async function operations(
         replyToId: cmd.replyToId,
         mentions: cmd.mentions,
         revision: 1,
+        ...(cmd.step && cmd.channel !== "cohort" ? { step: cmd.step } : {}),
       });
       for (const uid of cmd.mentions)
         notify(c, uid, "대화에서 나를 멘션했습니다.", id, "message");
@@ -793,6 +795,8 @@ export async function operations(
       if (cmd.target === "decision") await project(c, cmd.channel, "leader");
       else await editableProject(c, cmd.channel);
       const id = cmd.target + "-" + c.requestId;
+      // A record made from chat keeps the chat's step unless the member is now working in another step.
+      const step = cmd.step || (m as { step?: import("../steps").StepKey }).step;
       if (cmd.target === "task")
         write(
           c,
@@ -804,6 +808,7 @@ export async function operations(
             status: "todo",
             assigneeId: c.uid,
             sourceMessageId: m.id,
+            ...(step ? { step } : {}),
           },
           "project",
           cmd.channel,
@@ -818,6 +823,7 @@ export async function operations(
             body: cmd.body,
             reason: "팀 대화 검토",
             sourceMessageId: m.id,
+            ...(step ? { step } : {}),
           },
           "project",
           cmd.channel,

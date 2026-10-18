@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ArrowRight, ArrowUpRight, Check, Crown, MessageCircle, Plus } from "lucide-react";
 import { IdeaRefinement } from "./idea-refinement";
 import { characterFor } from "@/lib/characters";
@@ -8,8 +8,9 @@ import { answered, questionFields, statement } from "@/lib/refinement";
 import { docKeys, docNames, type DocKey } from "@/lib/workshop/model";
 import { recordsOf, type Props } from "./workshop/common";
 import type { Command, Idea, Member, Project } from "@/lib/types";
+import { projectTimeline, type StepKey } from "@/lib/steps";
+import { ProjectTimeline } from "./project-timeline";
 
-type StepKey = "thought" | "questions" | "definition" | "confirm" | "plan" | "build" | "show";
 const steps: { key: StepKey; name: string; title: string; hint: string }[] = [
   { key: "thought", name: "각자 생각", title: "어떤 순간이 불편했나요?", hint: "직접 겪은 일 하나를 짧게 적어요. 팀원 모두의 생각이 아래 벽에 모입니다." },
   { key: "questions", name: "경험 구체화", title: "그 경험을 다섯 질문으로 풀어요", hint: "누가·언제·무엇이 막혔는지 아는 만큼 적고, 모르면 ‘확인 필요’라고 남겨요." },
@@ -24,6 +25,8 @@ type StepsProps = Props & {
   saveIdea: (c: Command, onResult?: (result: { id?: string }) => void) => Promise<boolean>;
   onIdea: (id: string) => void;
   onNavigate: (tab: string, doc?: DocKey, target?: string) => void;
+  initialStep?: StepKey;
+  onStepChange: (step: StepKey) => void;
 };
 
 function Avatar({ member }: { member?: Member }) {
@@ -42,6 +45,7 @@ export function ProjectSteps(p: StepsProps) {
   );
   const mine = cards.filter((i) => i.ownerId === me.id);
   const [step, setStep] = useState<StepKey>(() => {
+    if (p.initialStep) return p.initialStep;
     if (!mine.length) return "thought";
     if (!mine.some((i) => answered(i.refinement) === 5)) return "questions";
     if (!mine.some((i) => i.refinement?.draft)) return "definition";
@@ -51,6 +55,9 @@ export function ProjectSteps(p: StepsProps) {
   const myCard = mine.find((i) => i.id === selectedId) || (selectedId === "new" ? undefined : mine[0]);
   const [title, setTitle] = useState(""), [body, setBody] = useState("");
   const [pick, setPick] = useState(""), [reason, setReason] = useState("");
+  const [history, setHistory] = useState<StepKey | "all" | null>(null);
+  const { onStepChange } = p;
+  useEffect(() => onStepChange(step), [step, onStepChange]);
 
   const docs = recordsOf(p, "document").filter((x) => x.projectId === team.id && !x.data.redacted && x.data.markdown.trim());
   const baselines = recordsOf(p, "baseline").filter((x) => x.projectId === team.id);
@@ -73,6 +80,11 @@ export function ProjectSteps(p: StepsProps) {
     build: { label: `배포 ${releases.length}`, done: releases.length > 0 },
     show: { label: showcase?.data.state === "published" ? "공개" : showcase ? "작성 중" : "시작 전", done: showcase?.data.state === "published" },
   };
+  const entries = useMemo(
+    () => projectTimeline({ project: team, ideas: cards, events: w.events, comments: w.comments, messages: w.messages, records: p.records }),
+    [team, cards, w.events, w.comments, w.messages, p.records],
+  );
+  const stepEntries = entries.filter((e) => e.group === step).length;
   const index = steps.findIndex((s) => s.key === step), spec = steps[index];
 
   async function createCard(e: FormEvent) {
@@ -98,7 +110,13 @@ export function ProjectSteps(p: StepsProps) {
             <span><strong>{s.name}</strong><small>{progress[s.key].label}</small></span>
           </button>
         ))}
+        <button type="button" className={"steps-history" + (history !== null ? " active" : "")} aria-pressed={history !== null} onClick={() => setHistory(history === null ? "all" : null)}>
+          <span><strong>이력</strong><small>기록 {entries.length}</small></span>
+        </button>
       </nav>
+      {history !== null ? (
+        <ProjectTimeline entries={entries} members={w.members} focus={history} onFocus={setHistory} onIdea={p.onIdea} onClose={() => { if (history !== "all") setStep(history); setHistory(null); }} />
+      ) : (<>
 
       {team.confirmedProblem && step !== "confirm" && (
         <p className="steps-problem"><Crown size={14} /> 확정한 문제 · {team.confirmedProblem.statement}</p>
@@ -252,9 +270,11 @@ export function ProjectSteps(p: StepsProps) {
       )}
 
       <div className="steps-nav">
+        <button className="text-button" onClick={() => setHistory(step)}>이 단계 기록 {stepEntries}개 보기</button>
         {index > 0 && <button className="secondary-button" onClick={() => setStep(steps[index - 1].key)}>이전 · {steps[index - 1].name}</button>}
         {index < steps.length - 1 && <button className="primary-button" onClick={() => setStep(steps[index + 1].key)}>다음 · {steps[index + 1].name} <ArrowRight size={15} /></button>}
       </div>
+      </>)}
     </section>
   );
 }

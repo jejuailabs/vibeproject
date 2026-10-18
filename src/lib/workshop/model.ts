@@ -1,3 +1,4 @@
+import type { StepKey } from "../steps";
 import type { Workspace, Member, Idea, Project } from "../types";
 export type Scope = "owner" | "project" | "cohort" | "admin";
 export type DocKey =
@@ -155,12 +156,14 @@ export interface DataMap {
     status: "todo" | "doing" | "done";
     assigneeId: string | null;
     sourceMessageId: string | null;
+    step?: StepKey;
   };
   decision: {
     title: string;
     body: string;
     reason: string;
     sourceMessageId: string | null;
+    step?: StepKey;
   };
   readiness: {
     items: Record<string, { done: boolean; exception: string }>;
@@ -202,6 +205,7 @@ export interface DataMap {
     sourceType: "transcript" | "notes";
     consent: boolean;
     redacted: boolean;
+    step?: StepKey;
   };
   proposal: {
     sourceId: string;

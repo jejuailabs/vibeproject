@@ -33,3 +33,24 @@ test('step rail scrolls inside itself on a phone',async({page})=>{
  await expect(page.locator('.steps-rail')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth)).toBe(false);
 });
+test('team chat carries the current step and the history groups records by step',async({page})=>{
+ await page.goto('/preview');
+ await page.getByLabel('미리보기 참가자').selectOption('jun');
+ await page.getByRole('button',{name:'프로젝트 공간'}).click();
+ const rail=page.getByRole('navigation',{name:'프로젝트 진행 단계'});
+ await rail.getByRole('button',{name:/문제정의/}).click();
+ const panel=page.locator('.chat-panel');
+ if(!await panel.isVisible())await page.getByRole('button',{name:'채팅 열기 또는 닫기'}).click();
+ await panel.getByRole('button',{name:'팀 대화'}).click();
+ await expect(panel.getByLabel('지금 작업 중인 단계')).toHaveValue('definition');
+ await panel.locator('#chat-input').fill('문제 문장 같이 봐요');
+ await panel.locator('.chat-compose button[type=submit]').click();
+ await expect(panel.locator('.message').filter({hasText:'문제 문장 같이 봐요'}).locator('.message-step')).toHaveText('문제정의');
+ await rail.getByRole('button',{name:/이력/}).click();
+ const group=page.locator('.timeline-group').filter({has:page.getByRole('heading',{name:/문제정의/})});
+ await expect(group).toContainText('문제 문장 같이 봐요');
+ await page.getByRole('group',{name:'기록 종류'}).getByRole('button',{name:'카드 저장'}).click();
+ await expect(page.locator('.timeline-entry').filter({hasText:'문제 문장 같이 봐요'})).toHaveCount(0);
+ await page.getByRole('button',{name:'단계로 돌아가기'}).click();
+ await expect(page.getByRole('heading',{name:'문제를 한 문장으로 정리해요'})).toBeVisible();
+});

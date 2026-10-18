@@ -7,6 +7,7 @@ import { DomainError, assertAdmin, assertCanRead, assertChannel, assertEditable,
 import type { Activity, Command, Comment, HistoryEvent, Idea, Member, Message, Project, Workspace } from '@/lib/types';
 import { z } from 'zod';
 import {characterIds} from '@/lib/characters';
+import {stepKey} from '@/lib/steps';
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const short = z.string().trim().min(1).max(120);
@@ -16,7 +17,7 @@ const commandSchema = z.discriminatedUnion('type', [
  z.object({type:z.literal('refineIdea'),id,revision:z.number().int().nonnegative(),phase:z.enum(['questions','definition']),input:refinementInputSchema,reason:short,scope:z.enum(['owner','project','cohort'])}),
  z.object({ type: z.literal('editIdea'), id, revision: z.number().int().nonnegative(), title: short, body, reason: short }),
  z.object({ type: z.literal('comment'), ideaId: id, body, context:feedbackContextSchema.optional() }),
- z.object({ type: z.literal('sendMessage'), channel: id, body: body.max(2000) }),
+ z.object({ type: z.literal('sendMessage'), channel: id, body: body.max(2000), step: stepKey.optional() }),
  z.object({ type: z.literal('selectIdea'), ideaId: id, revision: z.number().int().nonnegative(), projectName: short, reason: short }),
  z.object({ type: z.literal('closeIdea'), ideaId: id, revision: z.number().int().nonnegative(), reason: short }),
  z.object({ type: z.literal('setAvatar'), avatarId: z.enum(characterIds) }).strict(),
@@ -134,7 +135,7 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
    const rate=await tx.get(rateRef);
    if(rate.exists && Date.now()-Date.parse(rate.data()?.sentAt)<1000) throw new DomainError('RATE_LIMITED','잠시 후 메시지를 보내주세요.',429);
    const ref=c.collection('channels').doc(command.channel).collection('messages').doc();
-   tx.create(ref,{id:ref.id,authorId:uid,body:command.body,channel:command.channel,createdAt:now});
+   tx.create(ref,{id:ref.id,authorId:uid,body:command.body,channel:command.channel,createdAt:now,...(command.step&&command.channel!=='cohort'?{step:command.step}:{})});
    tx.set(rateRef,{sentAt:now}); result={id:ref.id};
   } else if(command.type==='setActivity') {
    if(me.role!=='admin' && me.role!=='facilitator') throw new DomainError('FORBIDDEN','운영 권한이 필요합니다.',403);

@@ -42,7 +42,7 @@ export function previewCommand(state:Workspace,command:Command):Workspace {
   if(command.scope==='project'&&!next.me.projectId)throw new Error('프로젝트에 먼저 참여해주세요.');
   const idea:Idea={id:uuid(),...command,ownerId:uid,projectId:command.scope==='project'?next.me.projectId:null,state:'shared',revision:1,version:1,createdAt:now,updatedAt:now};
   next.ideas.unshift(idea);record(idea,'첫 생각 공유','최초 작성');
- }else if(command.type==='sendMessage'){assertChannel(next.me,command.channel);next.messages.push({id:uuid(),authorId:uid,body:command.body,channel:command.channel,createdAt:now});
+ }else if(command.type==='sendMessage'){assertChannel(next.me,command.channel);next.messages.push({id:uuid(),authorId:uid,body:command.body,channel:command.channel,createdAt:now,...(command.step&&command.channel!=='cohort'?{step:command.step}:{})});
  }else if(command.type==='setActivity'){assertAdmin(next.me);next.activity.state=command.state;
  }else{
   const idea=next.ideas.find(i=>i.id===((command.type==='editIdea'||command.type==='refineIdea')?command.id:command.ideaId));if(!idea)throw new Error('아이디어가 없습니다.');

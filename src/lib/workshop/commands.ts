@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { docKeys, stages, readinessItems } from "./model";
+import { stepKey } from "../steps";
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,240}$/);
 const title = z.string().trim().min(1).max(160),
   body = z.string().trim().min(1).max(20000),
@@ -199,6 +200,7 @@ export const workshopCommand = z.discriminatedUnion("type", [
     status: z.enum(["todo", "doing", "done"]),
     assigneeId: z.union([id, z.null()]),
     sourceMessageId: z.union([id, z.null()]),
+    step: stepKey.optional(),
   }),
   S({
     type: z.literal("decision"),
@@ -207,6 +209,7 @@ export const workshopCommand = z.discriminatedUnion("type", [
     body,
     reason,
     sourceMessageId: z.union([id, z.null()]),
+    step: stepKey.optional(),
   }),
   S({
     type: z.literal("readiness"),
@@ -262,6 +265,7 @@ export const workshopCommand = z.discriminatedUnion("type", [
     scope,
     projectId: z.union([id, z.null()]),
     consent: z.boolean(),
+    step: stepKey.optional(),
   }),
   S({
     type: z.literal("proposal"),
@@ -308,6 +312,7 @@ export const workshopCommand = z.discriminatedUnion("type", [
     replyToId: id,
     body: z.string().trim().min(1).max(2000),
     mentions: z.array(id).max(20),
+    step: stepKey.optional(),
   }),
   S({
     type: z.literal("pinMessage"),
@@ -329,6 +334,7 @@ export const workshopCommand = z.discriminatedUnion("type", [
     target: z.enum(["idea", "task", "decision"]),
     title,
     body,
+    step: stepKey.optional(),
   }),
   S({ type: z.literal("readChannel"), channel: id }),
   S({ type: z.literal("readNotification"), notificationId: id }),

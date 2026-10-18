@@ -1,5 +1,6 @@
 import type {Refinement, RefinementInput} from './refinement';
 import type {CharacterId} from './characters';
+import type {StepKey} from './steps';
 export type Role = 'participant' | 'facilitator' | 'admin';
 export type Scope = 'owner' | 'project' | 'cohort';
 export type IdeaState = 'shared' | 'candidate' | 'selected' | 'closed_unselected';
@@ -17,7 +18,7 @@ export type Comment = {context?:FeedbackContext; id: string; ideaId: string; aut
 export type Project = { id: string; name: string; problem: string; leaderId: string; memberIds: string[]; sourceIdeaId: string; stage: string; createdAt: string; mode?: 'solo'|'team'; capacity?: number; intro?: string; joinPolicy?: JoinPolicy; confirmedProblem?: ConfirmedProblem };
 // Snapshot of the team member's problem definition the leader confirmed as the project's problem.
 export type ConfirmedProblem = { ideaId: string; ownerId: string; revision: number; draft: number; statement: string; reason: string; confirmedBy: string; confirmedAt: string };
-export type Message = { id: string; authorId: string; body: string; channel: string; createdAt: string; replyToId?: string; mentions?: string[]; revision?: number; pinned?: boolean; editedAt?: string };
+export type Message = { id: string; authorId: string; body: string; channel: string; createdAt: string; step?: StepKey; replyToId?: string; mentions?: string[]; revision?: number; pinned?: boolean; editedAt?: string };
 export type Activity = { id: string; title: string; question: string; description: string; state: 'open' | 'closed'; week: number };
 export type HistoryEvent = { id: string; ideaId: string; title: string; reason: string; actorId: string; createdAt: string; revision: number; snapshot: Pick<Idea, 'title' | 'body' | 'scope' | 'state' | 'refinement'> };
 export type Workspace = {
@@ -29,7 +30,7 @@ export type Command =
  | { type: 'refineIdea'; id: string; revision: number; phase: 'questions'|'definition'; input: RefinementInput; reason: string; scope: Scope }
  | { type: 'editIdea'; id: string; revision: number; title: string; body: string; reason: string }
  | { type: 'comment'; ideaId: string; body: string; context?: FeedbackContext }
- | { type: 'sendMessage'; channel: string; body: string }
+ | { type: 'sendMessage'; channel: string; body: string; step?: StepKey }
  | { type: 'selectIdea'; ideaId: string; revision: number; projectName: string; reason: string }
  | { type: 'closeIdea'; ideaId: string; revision: number; reason: string }
  | { type: 'setAvatar'; avatarId: CharacterId }
