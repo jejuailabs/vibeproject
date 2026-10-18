@@ -4,11 +4,13 @@ import {feedbackLabel} from "@/lib/exhibition";
 import {refinementText} from '@/lib/refinement';
 import {useCallback,useEffect,useRef,useState,type FormEvent} from 'react';
 import {onAuthStateChanged,GoogleAuthProvider,signInWithPopup,signOut,type User} from 'firebase/auth';
-import {ArrowUpRight,ArrowRight,ArrowLeft,LayoutDashboard,Lightbulb,Users,MessageCircle,Clock3,Plus,Send,ChevronDown,Check,Lock,Globe2,Leaf,LogOut,X,Menu,RefreshCw,LoaderCircle,Pencil,Archive,GitBranch,Play,Pause,Search,Sparkles,CheckCircle2} from 'lucide-react';
+import {ArrowUpRight,ArrowRight,ArrowLeft,LayoutDashboard,Lightbulb,Users,MessageCircle,Clock3,Plus,Send,ChevronDown,Check,Lock,Globe2,Leaf,LogOut,X,Menu,RefreshCw,LoaderCircle,Pencil,Archive,GitBranch,Play,Pause,Search,Sparkles,CheckCircle2,Images} from 'lucide-react';
 import {clientAuth,firebaseConfigured} from '@/lib/firebase-client';
 import {JourneyBoard} from './journey-board';
 import {ProjectLobby} from './project-lobby';
 import {ProjectSteps,ProjectStepsEmpty} from './project-steps';
+import {ExhibitionGallery} from './project-exhibit';
+import type {RecordOf} from '@/lib/workshop/model';
 import {projectIdsOf} from '@/lib/policy';
 import {stepKeys,stepNames,type StepKey} from '@/lib/steps';
 import type {DocKey} from '@/lib/workshop/model';
@@ -20,7 +22,7 @@ import {characterFor} from '@/lib/characters';
 import {previewWorkspace,previewCommand} from '@/lib/preview';
 import type {Workspace,Command,Idea,Member,Scope} from '@/lib/types';
 
-type View='dashboard'|'ideas'|'projects'|'history'|'workshop';
+type View='dashboard'|'ideas'|'projects'|'history'|'workshop'|'gallery';
 type Space='me'|'cohort'|'project';
 const cohortId=process.env.NEXT_PUBLIC_COHORT_ID||'vibe-2026-01';
 const kindLabel={thought:'생각 나누기',question:'함께 고민해요',progress:'진행 공유'};
@@ -143,7 +145,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  <Brand/><div className="cohort-select"><div className="cohort-logo">V<span>1</span></div><div><strong>{data.cohort.name}</strong><small>4주간의 새로운 시작</small></div><ChevronDown size={15}/></div>
  <span className="nav-label">WORKSPACE</span>
  <nav>
- {([['dashboard',LayoutDashboard,'대시보드'],['ideas',Lightbulb,'아이디어 보드'],['projects',Users,'프로젝트'],['history',Clock3,'성장 이력'],['workshop',Sparkles,'워크숍 진행']] as const).map(([id,Icon,label])=><button key={id} className={view===id?'nav-item active':'nav-item'} aria-label={label} title={label} onClick={()=>navigate(id)}><Icon size={19}/><span className='nav-text'>{label}</span>{id==='ideas'&&<span className="nav-count">{data.ideas.length}</span>}</button>)}
+ {([['dashboard',LayoutDashboard,'대시보드'],['ideas',Lightbulb,'아이디어 보드'],['projects',Users,'프로젝트'],['history',Clock3,'성장 이력'],['gallery',Images,'전시 갤러리'],['workshop',Sparkles,'워크숍 진행']] as const).map(([id,Icon,label])=><button key={id} className={view===id?'nav-item active':'nav-item'} aria-label={label} title={label} onClick={()=>navigate(id)}><Icon size={19}/><span className='nav-text'>{label}</span>{id==='ideas'&&<span className="nav-count">{data.ideas.length}</span>}</button>)}
  <button className="nav-item" aria-label="대화 공간" title="대화 공간" onClick={()=>setChatOpen(v=>!v)}><MessageCircle size={19}/><span className="nav-text">대화 공간</span><span className="chat-dot"/></button>
  </nav>
  <div className="sidebar-journey"><span>OUR JOURNEY</span><p>작은 생각이<br/>세상을 바꾸는 여정.</p><div className="journey-dots">{[1,2,3,4].map(w=><i key={w} className={w<=data.cohort.week?'done':''}/>)}</div><small>WEEK {data.cohort.week} OF 4</small></div>
@@ -153,11 +155,12 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  <header className="topbar"><button className="icon-button mobile-menu" onClick={()=>setMobileNav(v=>!v)} aria-label="메뉴 열기"><Menu size={22}/></button><div className="space-tabs">{([['me','내 공간'],['project','프로젝트 공간'],['cohort','전체 공간']] as const).map(([id,label])=><button key={id} className={space===id?'selected':''} onClick={()=>{setSpace(id);setFilter('all');setMemberFilter(null);}}>{label}</button>)}</div><div className="top-actions"><span className="cohort-status"><i/>WEEK {data.cohort.week} · 함께 만드는 중</span><button className="icon-button" onClick={()=>user?load(user).catch(e=>setError(e.message)):setNotice('미리보기는 현재 샘플 상태를 보여줍니다.')} aria-label="새로고침"><RefreshCw size={17}/></button><button className="icon-button" onClick={()=>setChatOpen(v=>!v)} aria-label="채팅 열기 또는 닫기"><MessageCircle size={19}/></button></div></header>
  <main className="main-content">
  {error&&<div className="error-banner" role="alert">{error}<button aria-label="오류 닫기" onClick={()=>setError('')}><X size={16}/></button></div>}
- <div className="page-heading"><div><span className="eyebrow">{view==='workshop'?'YOUR WORKSHOP / IN PLAY':view==='dashboard'?'MAKE SOMETHING MEANINGFUL':view==='ideas'?'IDEAS GROW TOGETHER':view==='projects'?'BETTER, TOGETHER':'EVERY STEP MATTERS'}</span><h1>{view==='workshop'?'워크숍 플레이북':view==='dashboard'?(space==='me'?me.name.split(' ')[0]+'님의 작업 공간':space==='project'?'우리의 프로젝트':'함께 만드는 가능성'):view==='ideas'?'아이디어 보드':view==='projects'?'프로젝트 만들기 · 참여하기':'생각이 자라온 기록'}</h1><p>{view==='workshop'?'현장 활동부터 팀 구성, 개발과 발표까지 한 공간에서 진행하세요.':view==='dashboard'?'오늘의 작은 생각을, 다음 가능성으로 연결해보세요.':view==='ideas'?'서로의 시선이 더해지면, 작은 생각도 달라집니다.':view==='projects'?'리더는 프로젝트를 만들고, 팀원은 목록에서 골라 참여해요.':'첫 생각부터 지금까지, 우리의 변화가 남아 있어요.'}</p></div>{view!=='projects'&&!(view==='dashboard'&&space==='project')&&<button className="primary-button" onClick={()=>view==='dashboard'?setStartRequest(n=>n+1):openComposer()}><Plus size={17}/>생각 남기기</button>}</div>
- {view==='dashboard'&&space==='project'&&(project?<ProjectSteps key={me.id+project.id} project={project} workspace={data} {...workshop} run={stepRun} initialStep={projectStep} onStepChange={setProjectStep} busy={busy||workshop.busy} preview={preview} saveIdea={run} onIdea={id=>{setSelected(id);setComment('');}} onNavigate={(tab,docKey,target)=>{setWorkshopTab({id:tab,docKey,target,revision:Date.now()});navigate('workshop');if(!target)window.scrollTo({top:0});}}/>:<ProjectStepsEmpty onLobby={()=>navigate('projects')}/>)}
+ <div className="page-heading"><div><span className="eyebrow">{view==='workshop'?'YOUR WORKSHOP / IN PLAY':view==='dashboard'?'MAKE SOMETHING MEANINGFUL':view==='ideas'?'IDEAS GROW TOGETHER':view==='projects'?'BETTER, TOGETHER':view==='gallery'?'SHOW WHAT WE MADE':'EVERY STEP MATTERS'}</span><h1>{view==='workshop'?'워크숍 플레이북':view==='dashboard'?(space==='me'?me.name.split(' ')[0]+'님의 작업 공간':space==='project'?'우리의 프로젝트':'함께 만드는 가능성'):view==='ideas'?'아이디어 보드':view==='projects'?'프로젝트 만들기 · 참여하기':view==='gallery'?'워크숍 전시 갤러리':'생각이 자라온 기록'}</h1><p>{view==='workshop'?'현장 활동부터 팀 구성, 개발과 발표까지 한 공간에서 진행하세요.':view==='dashboard'?'오늘의 작은 생각을, 다음 가능성으로 연결해보세요.':view==='ideas'?'서로의 시선이 더해지면, 작은 생각도 달라집니다.':view==='projects'?'리더는 프로젝트를 만들고, 팀원은 목록에서 골라 참여해요.':view==='gallery'?'각 팀의 처음 생각, 확정한 문제, 결과를 한곳에서 봐요.':'첫 생각부터 지금까지, 우리의 변화가 남아 있어요.'}</p></div>{view!=='projects'&&view!=='gallery'&&!(view==='dashboard'&&space==='project')&&<button className="primary-button" onClick={()=>view==='dashboard'?setStartRequest(n=>n+1):openComposer()}><Plus size={17}/>생각 남기기</button>}</div>
+ {view==='dashboard'&&space==='project'&&(project?<ProjectSteps key={me.id+project.id} project={project} workspace={data} {...workshop} run={stepRun} initialStep={projectStep} onStepChange={setProjectStep} onGallery={()=>navigate('gallery')} busy={busy||workshop.busy} preview={preview} saveIdea={run} onIdea={id=>{setSelected(id);setComment('');}} onNavigate={(tab,docKey,target)=>{setWorkshopTab({id:tab,docKey,target,revision:Date.now()});navigate('workshop');if(!target)window.scrollTo({top:0});}}/>:<ProjectStepsEmpty onLobby={()=>navigate('projects')}/>)}
  {view==='dashboard'&&space!=='project'&&<JourneyBoard key={me.id} workspace={data} {...workshop} busy={busy||workshop.busy} preview={preview} scope={space} startRequest={startRequest} saveIdea={run} loadMore={loadOlder} onIdea={id=>{setSelected(id);setComment('');}} onNavigate={(tab,docKey,target)=>{setWorkshopTab({id:tab,docKey,target,revision:Date.now()});navigate('workshop');if(!target)window.scrollTo({top:0});}}/>}
  {view==='workshop'&&<button className="journey-back" onClick={()=>navigate('dashboard')}><ArrowLeft size={17}/> 어디서부터 시작할까요? 단계별 활동 보드로</button>}
- {!(view==='dashboard'&&space==='project')&&<ArenaProfile workspace={data} records={workshop.records} space={space} compact onCharacter={()=>{setError('');setCharacterOpen(true);}} onIdeas={()=>navigate('ideas')} onStage={tab=>{setWorkshopTab({id:tab,revision:Date.now()});navigate('workshop');}}/>}
+ {!(view==='dashboard'&&space==='project')&&view!=='gallery'&&<ArenaProfile workspace={data} records={workshop.records} space={space} compact onCharacter={()=>{setError('');setCharacterOpen(true);}} onIdeas={()=>navigate('ideas')} onStage={tab=>{setWorkshopTab({id:tab,revision:Date.now()});navigate('workshop');}}/>}
+ {view==='gallery'&&<ExhibitionGallery projects={data.projects} showcases={workshop.records.filter((r):r is RecordOf<'showcase'>=>r.kind==='showcase')} members={data.members} onWrite={project?.leaderId===me.id?()=>{setWorkshopTab({id:'showcase',target:'showcase-editor',revision:Date.now()});navigate('workshop');}:undefined}/>}
  {view==='workshop'&&stepChip}
  {view==='workshop'&&<WorkshopHub workspace={data} {...workshop} run={stepRun} preview={preview} requestedTab={workshopTab}/>}
  {view==='dashboard'&&!projectDashboard&&<>

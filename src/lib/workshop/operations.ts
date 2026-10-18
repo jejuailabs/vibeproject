@@ -562,6 +562,27 @@ export async function operations(
                   ...p,
                   problem: "출발 원문이 정정된 프로젝트",
                 });
+              const confirmedIn = await c.store.list<import("../types").Project>(
+                path(c, "projects"),
+                [{ field: "confirmedProblem.ideaId", value: i.id }],
+              );
+              for (const p of confirmedIn)
+                saveProject(c, {
+                  ...p,
+                  problem: "출발 원문이 정정된 프로젝트",
+                  confirmedProblem: { ...p.confirmedProblem!, statement: "원본 정정으로 숨긴 문제", reason: "" },
+                });
+              // Published exhibitions are snapshots, so the corrected card is removed from them as well.
+              for (const p of [...projects, ...confirmedIn]) {
+                const show = await optional(c, "showcase-" + p.id, "showcase");
+                if (show?.data.story) {
+                  const { origin: _hidden, ...kept } = show.data.story;
+                  write(c, show.id, "showcase", {
+                    ...show.data,
+                    story: { ...kept, problem: { ...show.data.story.problem, statement: "원본 정정으로 숨긴 문제", reason: "" } },
+                  }, show.scope, show.projectId, show.ownerId, show);
+                }
+              }
               const rounds = await c.store.list<RecordOf<"round">>(
                 path(c, "workshop"),
                 [{ field: "kind", value: "round" }],

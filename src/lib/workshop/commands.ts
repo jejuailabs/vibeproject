@@ -246,6 +246,8 @@ export const workshopCommand = z.discriminatedUnion("type", [
     constraints: z.string().max(5000),
     milestones: z.array(z.string().trim().min(1).max(1000)).min(1).max(5),
     state: z.enum(["draft", "published"]),
+    includeOrigin: z.boolean().optional(),
+    includeJourney: z.boolean().optional(),
   }),
   S({
     type: z.literal("schedule"),

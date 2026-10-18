@@ -161,7 +161,7 @@ test("solo project completes planning, baseline ZIP, development, release and sh
   await a.getByLabel("공개 상태").selectOption("published");
   await submit(a);
   await expect(
-    page.locator(".wk-showcase").getByRole("heading", { name: "함께 시작" }),
+    page.locator(".exhibit").getByRole("heading", { name: "함께 시작" }),
   ).toBeVisible();
   await page.screenshot({
     path: "work/workshop/showcase-desktop.png",

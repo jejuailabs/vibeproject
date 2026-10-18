@@ -1,7 +1,7 @@
-import type { Context, RecordOf, DocKey } from "./model";
+import type { Context, RecordOf, DocKey, ExhibitStory, WorkshopRecord } from "./model";
 import { docKeys, docNames, readinessItems, stages, stageNames } from "./model";
 import type { WorkshopCommand } from "./commands";
-import type { Idea, Message } from "../types";
+import type { Idea, Message, Project, HistoryEvent } from "../types";
 import {
   admin,
   fail,
@@ -377,7 +377,9 @@ export async function studio(
       await project(c, cmd.projectId, "leader");
       const id = "showcase-" + cmd.projectId,
         old = await optional(c, id, "showcase");
-      const { type, projectId, ...data } = cmd;
+      const { type, projectId, includeOrigin, includeJourney, ...fields } = cmd;
+      const p = await c.store.read<Project>(path(c, "projects/" + cmd.projectId));
+      const data = { ...fields, story: await exhibitStory(c, p!, !!includeOrigin, !!includeJourney) };
       write(
         c,
         id,
@@ -430,4 +432,49 @@ export async function studio(
     default:
       return null;
   }
+}
+
+async function exhibitStory(c: Context, p: Project, includeOrigin: boolean, includeJourney: boolean): Promise<ExhibitStory> {
+  const confirmed = p.confirmedProblem;
+  const story: ExhibitStory = {
+    problem: {
+      statement: confirmed?.statement || p.problem,
+      draft: confirmed?.draft || 0,
+      reason: confirmed?.reason || "",
+      ownerId: confirmed?.ownerId || null,
+    },
+    builtAt: c.now,
+  };
+  const originId = confirmed?.ideaId || p.sourceIdeaId;
+  if (includeOrigin && originId) {
+    const card = await c.store.read<Idea>(path(c, "ideas/" + originId));
+    const first = (await c.store.list<HistoryEvent>(path(c, "ideas/" + originId + "/history"))).sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    )[0];
+    if (card)
+      story.origin = {
+        title: first?.snapshot.title || card.title,
+        body: first?.snapshot.body || card.body,
+        ownerId: card.ownerId,
+        at: first?.createdAt || card.createdAt,
+      };
+  }
+  if (includeJourney) {
+    const records = await c.store.list<WorkshopRecord>(path(c, "workshop"), [{ field: "projectId", value: p.id }]);
+    const cards = await c.store.list<Idea>(path(c, "ideas"), [{ field: "projectId", value: p.id }]);
+    const count = (kind: string) => records.filter((r) => r.kind === kind).length;
+    const tasks = records.filter((r): r is RecordOf<"task"> => r.kind === "task");
+    story.journey = {
+      members: p.memberIds.length,
+      cards: cards.length,
+      drafts: cards.reduce((n, i) => n + (i.refinement?.draft || 0), 0),
+      meetings: records.filter((r) => r.kind === "source" && !(r as RecordOf<"source">).data.redacted).length,
+      decisions: count("decision"),
+      tasks: tasks.length,
+      tasksDone: tasks.filter((t) => t.data.status === "done").length,
+      docs: new Set(records.filter((r): r is RecordOf<"document"> => r.kind === "document" && !r.data.redacted && !!r.data.markdown.trim()).map((r) => r.data.key)).size,
+      releases: count("release"),
+    };
+  }
+  return story;
 }

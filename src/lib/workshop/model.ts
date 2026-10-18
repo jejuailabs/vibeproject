@@ -80,6 +80,13 @@ export type VoteData = {
   counts: Record<string, number>;
   reason: string;
 };
+// Snapshot taken when the leader saves the showcase; private parts are included only on the leader's choice.
+export type ExhibitStory = {
+  origin?: { title: string; body: string; ownerId: string; at: string };
+  problem: { statement: string; draft: number; reason: string; ownerId: string | null };
+  journey?: { members: number; cards: number; drafts: number; meetings: number; decisions: number; tasks: number; tasksDone: number; docs: number; releases: number };
+  builtAt: string;
+};
 export type ProjectData = {
   mode: "solo" | "team";
   capacity: number;
@@ -191,6 +198,7 @@ export interface DataMap {
     constraints: string;
     milestones: string[];
     state: "draft" | "published";
+    story?: ExhibitStory;
   };
   schedule: {
     startsAt: string;

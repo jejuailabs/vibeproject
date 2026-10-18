@@ -1,5 +1,5 @@
 "use client";
-import { characterFor } from "@/lib/characters";
+import { ProjectExhibit } from "../project-exhibit";
 import {
   Action,
   Box,
@@ -23,8 +23,7 @@ export function Showcase(p: Props) {
     <>
       <Box id="showcase-work" title="우리의 4주를 세상에 보여줄 시간" eyebrow="DEMO DAY">
         <p>
-          공개할 변화 3~5개를 직접 골라주세요. 비공개 원문이나 팀 대화는 발표에
-          자동으로 포함되지 않습니다.
+          공개할 변화 3~5개를 직접 골라주세요. 처음 생각 카드와 진행 숫자는 체크한 경우에만 저장 시점 그대로 전시에 들어갑니다. 팀 대화와 회의 원문은 포함되지 않습니다.
         </p>
         {leader && team && (
           <Action
@@ -76,6 +75,18 @@ export function Showcase(p: Props) {
                 value: existing?.data.milestones.join("\n"),
               },
               {
+                name: "includeOrigin",
+                label: "처음 생각 카드(제목·내용)를 전시에 포함",
+                type: "check",
+                value: !!existing?.data.story?.origin,
+              },
+              {
+                name: "includeJourney",
+                label: "진행 숫자(팀원·카드·초안·회의·결정·할 일·문서·배포 수)를 전시에 포함",
+                type: "check",
+                value: !!existing?.data.story?.journey,
+              },
+              {
                 name: "state",
                 label: "공개 상태",
                 type: "select",
@@ -102,30 +113,9 @@ export function Showcase(p: Props) {
             완성된 프로젝트가 이곳에서 첫 생각부터 구현까지의 여정을 공유합니다.
           </Empty>
         )}
-        <div className="wk-grid">
+        <div className="wk-exhibits">
           {showcases.map((s) => (
-            <article className="wk-showcase" key={s.id}>
-              <div className="wk-showcase-cover"><span>MADE<br/>IT REAL.</span><img src={characterFor(w.members.find(m => m.id === w.projects.find(t => t.id === s.projectId)?.leaderId)).image} alt="프로젝트 리더의 캐릭터" loading="lazy"/><small>DEMO DAY / WEEK 04</small></div>
-              <Badge>
-                {s.data.state === "published" ? "공개 발표" : "팀 초안"}
-              </Badge>
-              <h2>{w.projects.find((t) => t.id === s.projectId)?.name}</h2>
-              <h4>출발한 문제</h4>
-              <p>{s.data.problem}</p>
-              <h4>우리의 해결책</h4>
-              <p>{s.data.solution}</p>
-              <ol>
-                {s.data.milestones.map((m, i) => (
-                  <li key={i}>{m}</li>
-                ))}
-              </ol>
-              <div className="wk-links">
-                {link(s.data.demoUrl, "시연 시작")}
-                {link(s.data.slidesUrl, "발표 자료")}
-              </div>
-              <p>{s.data.retrospective}</p>
-              <small>{s.data.constraints}</small>
-            </article>
+            <ProjectExhibit key={s.id} project={w.projects.find((t) => t.id === s.projectId)} showcase={s} members={w.members} />
           ))}
         </div>
       </Box>

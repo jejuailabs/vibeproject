@@ -10,6 +10,7 @@ import { recordsOf, type Props } from "./workshop/common";
 import type { Command, Idea, Member, Project } from "@/lib/types";
 import { projectTimeline, type StepKey } from "@/lib/steps";
 import { ProjectTimeline } from "./project-timeline";
+import { ProjectExhibit } from "./project-exhibit";
 
 const steps: { key: StepKey; name: string; title: string; hint: string }[] = [
   { key: "thought", name: "각자 생각", title: "어떤 순간이 불편했나요?", hint: "직접 겪은 일 하나를 짧게 적어요. 팀원 모두의 생각이 아래 벽에 모입니다." },
@@ -27,6 +28,7 @@ type StepsProps = Props & {
   onNavigate: (tab: string, doc?: DocKey, target?: string) => void;
   initialStep?: StepKey;
   onStepChange: (step: StepKey) => void;
+  onGallery: () => void;
 };
 
 function Avatar({ member }: { member?: Member }) {
@@ -260,11 +262,18 @@ export function ProjectSteps(p: StepsProps) {
       {step === "show" && (
         <div className="steps-panel">
           {showcase ? (
-            <div className="steps-confirmed"><span>{showcase.data.state === "published" ? "전체에 공개한 전시" : "작성 중인 전시"}</span><blockquote>{showcase.data.problem}</blockquote><p>{showcase.data.solution}</p></div>
-          ) : <p className="steps-note">{leader ? "문제·해결·시연·회고를 정리해 전시 카드를 만드세요." : "리더가 전시 카드를 정리합니다. 팀 대화에 결과와 회고를 보태주세요."}</p>}
+            <ProjectExhibit project={team} showcase={showcase} members={w.members} />
+          ) : (
+            <div className="steps-preview">
+              <span>01 · 처음 생각</span><p>{team.confirmedProblem ? cards.find((i) => i.id === team.confirmedProblem!.ideaId)?.title || "확정한 카드의 처음 생각" : "팀 카드 중 하나"}</p>
+              <span>02 · 확정한 문제</span><p>{team.confirmedProblem?.statement || "4단계에서 리더가 문제를 확정하면 여기에 들어가요."}</p>
+              <span>03 · 결과</span><p>만든 해결책, 시연 주소, 생각이 바뀐 순간, 회고</p>
+              <small>{leader ? "전시 카드를 저장하면 이 흐름으로 보여요. 처음 생각과 진행 숫자는 포함할지 직접 고릅니다." : "리더가 전시 카드를 정리합니다. 팀 대화에 결과와 회고를 보태주세요."}</small>
+            </div>
+          )}
           <div className="steps-actions">
-            <button className="secondary-button" onClick={() => p.onNavigate("showcase")}>전체 전시 보기</button>
-            <button className="primary-button" onClick={() => p.onNavigate("showcase", undefined, leader ? "showcase-editor" : "showcase-work")}>{leader ? "전시 카드 작성" : "우리 팀 전시 보기"} <ArrowRight size={15} /></button>
+            <button className="secondary-button" onClick={p.onGallery}>워크숍 전시 갤러리</button>
+            {leader && <button className="primary-button" onClick={() => p.onNavigate("showcase", undefined, "showcase-editor")}>{showcase ? "전시 고치기" : "전시 카드 작성"} <ArrowRight size={15} /></button>}
           </div>
         </div>
       )}
