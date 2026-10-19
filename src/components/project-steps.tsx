@@ -11,6 +11,8 @@ import type { Command, Idea, Member, Project } from "@/lib/types";
 import { projectTimeline, type StepKey } from "@/lib/steps";
 import { ProjectTimeline } from "./project-timeline";
 import { ProjectExhibit } from "./project-exhibit";
+import { AICoach } from "./ai-coach";
+import { CardPreview } from "./card-view";
 
 const steps: { key: StepKey; name: string; title: string; hint: string }[] = [
   { key: "thought", name: "각자 생각", title: "어떤 순간이 불편했나요?", hint: "직접 겪은 일 하나를 짧게 적어요. 팀원 모두의 생각이 아래 벽에 모입니다." },
@@ -146,11 +148,19 @@ export function ProjectSteps(p: StepsProps) {
               )}
             </div>
             {step === "thought" && (!myCard ? (
+              <div className={p.askCoach ? "write-grid" : ""}>
               <form className="steps-form" onSubmit={createCard}>
                 <label>무슨 일이었나요?<input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required placeholder="예: 모임에 처음 가면 누구에게 말을 걸지 모르겠어요" disabled={p.busy || ended} /></label>
                 <label>언제, 누구에게, 무엇이 불편했나요?<textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} maxLength={5000} required placeholder="직접 겪은 일을 편하게 적어요." disabled={p.busy || ended} /></label>
                 <div className="steps-actions"><small>저장하면 팀 벽에 올라가고 다음 단계로 넘어가요.</small><button className="primary-button" disabled={p.busy || ended || !title.trim() || !body.trim()}>팀 벽에 올리기 <ArrowRight size={15} /></button></div>
               </form>
+              {p.askCoach && (
+                <div className="write-aside">
+                  <AICoach phase="thought" ask={p.askCoach} aiEnabled={p.ai?.enabled} disabled={p.busy || ended} values={{ title, body }} context={{ title, body }} onApply={(k, t) => (k === "title" ? setTitle(t.slice(0, 120)) : setBody(t))} />
+                  <CardPreview phase="thought" member={me} title={title} body={body} />
+                </div>
+              )}
+              </div>
             ) : (
               <div className="steps-mine">
                 <strong>{myCard.title}</strong><p>{myCard.body}</p>
@@ -164,7 +174,7 @@ export function ProjectSteps(p: StepsProps) {
             ) : myCard.state !== "shared" ? (
               <div className="steps-empty"><p>이 카드는 {myCard.state === "selected" ? "프로젝트 출발 카드로" : "투표·종료로"} 고정되어 수정할 수 없어요. 새 생각을 추가해 이어갈 수 있어요.</p><button className="primary-button" onClick={() => { setSelectedId("new"); setStep("thought"); }}><Plus size={15} /> 새 생각 추가</button></div>
             ) : (
-              <IdeaRefinement key={myCard.id + step} idea={myCard} editable={!ended} hasProject teamOnly busy={p.busy} run={p.saveIdea} activePanel={step === "definition" ? "definition" : "questions"} onPanelChange={(panel) => setStep(panel)} />
+              <IdeaRefinement key={myCard.id + step} idea={myCard} editable={!ended} hasProject teamOnly busy={p.busy} run={p.saveIdea} activePanel={step === "definition" ? "definition" : "questions"} onPanelChange={(panel) => setStep(panel)} coach={p.askCoach} aiEnabled={p.ai?.enabled} owner={me} />
             ))}
           </div>
 
@@ -176,7 +186,8 @@ export function ProjectSteps(p: StepsProps) {
             {cards.map((i) => {
               const owner = w.members.find((m) => m.id === i.ownerId), done = cardDone(step, i);
               return (
-                <article key={i.id} className={"steps-card" + (done ? "" : " waiting") + (i.ownerId === me.id ? " mine" : "")}>
+                <article key={i.id} className={"steps-card open" + (done ? "" : " waiting") + (i.ownerId === me.id ? " mine" : "")} role="button" tabIndex={0} aria-label={(owner?.name || "팀원") + "의 카드 전체 보기 · " + i.title}
+                  onClick={() => p.onIdea(i.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); p.onIdea(i.id); } }}>
                   <header><Avatar member={owner} /><span><strong>{owner?.name || "팀원"}</strong><small>{i.title}</small></span></header>
                   {step === "thought" && <p>{i.body}</p>}
                   {step === "questions" && (done || answered(i.refinement) ? (
@@ -185,7 +196,7 @@ export function ProjectSteps(p: StepsProps) {
                   {step === "definition" && (done ? (
                     <><blockquote>{statement(i.refinement!)}</blockquote><small className="steps-badge">초안 {i.refinement!.draft}{i.refinement!.ready ? " · 점검 완료" : ""}</small></>
                   ) : <p className="steps-muted">문제정의 초안을 쓰는 중이에요.</p>)}
-                  <footer><button className="text-button" onClick={() => p.onIdea(i.id)}><MessageCircle size={13} /> 의견 {commentCount(i.id)}</button></footer>
+                  <footer><span className="steps-open-hint">눌러서 전체 보기</span><span className="text-button"><MessageCircle size={13} /> 의견 {commentCount(i.id)}</span></footer>
                 </article>
               );
             })}
@@ -214,7 +225,7 @@ export function ProjectSteps(p: StepsProps) {
                     {leader && !ended && <input type="radio" name="problem" value={i.id} checked={pick === i.id} onChange={() => setPick(i.id)} />}
                     <header><Avatar member={owner} /><span><strong>{owner?.name}</strong><small>초안 {i.refinement!.draft}{chosen ? " · 확정됨" : ""}</small></span></header>
                     <blockquote>{statement(i.refinement!)}</blockquote>
-                    <footer><button type="button" className="text-button" onClick={() => p.onIdea(i.id)}><MessageCircle size={13} /> 의견 {commentCount(i.id)}</button></footer>
+                    <footer><button type="button" className="text-button" onClick={(e) => { e.preventDefault(); p.onIdea(i.id); }}>전체 보기 · <MessageCircle size={13} /> 의견 {commentCount(i.id)}</button></footer>
                   </label>
                 );
               })}

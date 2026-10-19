@@ -11,6 +11,7 @@ import type {
 import { previewWorkshop } from "@/lib/workshop/memory";
 import { canRead } from "@/lib/workshop/core";
 import { baselineArchive } from "@/lib/workshop/export";
+import { basicCoach, type CoachInput, type CoachReply } from "@/lib/coaching";
 export function useWorkshop({
   data,
   setData,
@@ -135,6 +136,18 @@ export function useWorkshop({
     } finally {
       setBusy(false);
     }
+  }
+  // The coach only suggests text; nothing is saved until the writer saves the form.
+  async function askCoach(input: CoachInput): Promise<CoachReply> {
+    if (preview || !user) return basicCoach(input);
+    const response = await fetch("/api/coach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await user.getIdToken()) },
+      body: JSON.stringify({ cohortId, ...input }),
+    });
+    const value = await response.json();
+    if (!response.ok) throw new Error(value.error || "AI 코치가 답하지 못했어요.");
+    return value;
   }
   function saveBlob(blob: Blob, name: string) {
     const url = URL.createObjectURL(blob),
@@ -328,6 +341,7 @@ export function useWorkshop({
     ai,
     busy,
     run,
+    askCoach,
     upload,
     download,
     exportBaseline,

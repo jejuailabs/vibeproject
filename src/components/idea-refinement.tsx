@@ -1,12 +1,15 @@
 "use client";
 import {useState} from 'react';
-import type {Idea,Command,Scope} from '@/lib/types';
-import {questionFields,definitionFields,emptyRefinement,answered,refinementLabel,refinementText,statement,solutionHints,type Refinement} from '@/lib/refinement';
+import type {Idea,Command,Scope,Member} from '@/lib/types';
+import type {CoachAsk} from '@/lib/coaching';
+import {AICoach} from './ai-coach';
+import {CardPreview,RefinementView} from './card-view';
+import {questionFields,definitionFields,emptyRefinement,answered,refinementLabel,statement,solutionHints,type Refinement} from '@/lib/refinement';
 export function RefinementSummary({value}:{value?:Refinement}){
  if(!value)return null;
- return <details className="refinement-summary"><summary>질문 답변·문제정의 {value.draft?`초안 ${value.draft}`:''}{value.ready?' · 선정 준비':''}</summary><pre>{refinementText(value)}</pre></details>;
+ return <details className="refinement-summary"><summary>마지막으로 저장한 내용 {value.draft?`· 초안 ${value.draft}`:''}{value.ready?' · 선정 준비':''}</summary><RefinementView value={value}/></details>;
 }
-export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePanel,onPanelChange,teamOnly}:{idea:Idea;editable:boolean;hasProject:boolean;busy:boolean;error?:string;run:(c:Command)=>Promise<boolean>;activePanel?:'questions'|'definition';onPanelChange?:(panel:'questions'|'definition')=>void;teamOnly?:boolean}){
+export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePanel,onPanelChange,teamOnly,coach,aiEnabled,owner}:{idea:Idea;editable:boolean;hasProject:boolean;busy:boolean;error?:string;run:(c:Command)=>Promise<boolean>;activePanel?:'questions'|'definition';onPanelChange?:(panel:'questions'|'definition')=>void;teamOnly?:boolean;coach?:CoachAsk;aiEnabled?:boolean;owner?:Member}){
  const [value,setValue]=useState<Refinement>(()=>structuredClone(idea.refinement||emptyRefinement()));
  const [base,setBase]=useState(idea.revision),[scope,setScope]=useState<Scope>(idea.scope);
  const [localPanel,setLocalPanel]=useState<'questions'|'definition'>(answered(idea.refinement)===5?'definition':'questions');
@@ -28,11 +31,12 @@ export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePa
    if(next)setPanel('definition');
   }
  }
- if(!editable)return <section className="refinement-read"><span className="refinement-badge">{refinementLabel(idea)}</span>{idea.refinement?.draft?<blockquote>{statement(idea.refinement)}</blockquote>:<p>작성자가 질문에 답하면서 문제를 구체화하고 있어요. 아래 의견으로 경험과 질문을 보태주세요.</p>}<RefinementSummary value={idea.refinement}/></section>;
+ if(!editable)return <section className="refinement-read"><span className="refinement-badge">{refinementLabel(idea)}</span>{idea.refinement?<RefinementView value={idea.refinement}/>:<p>작성자가 질문에 답하면서 문제를 구체화하고 있어요. 아래 의견으로 경험과 질문을 보태주세요.</p>}</section>;
  return <section className="refinement-editor" aria-label="생각 구체화와 문제정의">
   <header><span className="refinement-badge">{refinementLabel(idea)}</span><h3>이 생각을 문제로 다듬어볼까요?</h3><p>경험을 구체화하고, 해결 방법을 정하기 전에 문제를 한 문장으로 남겨요.</p></header>
   <nav aria-label="생각 다듬기 단계" hidden={!!activePanel}><button type="button" aria-pressed={panel==='questions'} onClick={()=>setPanel('questions')}>1. 경험 구체화 · {answered(value)}/5</button><button type="button" aria-pressed={panel==='definition'} disabled={answered(idea.refinement)!==5} onClick={()=>setPanel('definition')}>2. 문제정의카드</button></nav>
   {conflict&&<div role="alert" className="refinement-conflict">다른 변경이 먼저 저장됐어요. 입력은 유지했습니다. 최신 내용을 확인한 뒤 다시 작성해주세요.<button type="button" onClick={reload}>최신 저장본 불러오기</button></div>}
+  <div className={coach?'write-grid':''}>
   <form onSubmit={e=>{e.preventDefault();void save(panel);}}>
    <fieldset disabled={busy||conflict}>
    {panel==='questions'?<><h4>막연한 생각 다음에, 실제 경험을 적어요.</h4><p>아는 만큼 저장하고 이어 써도 됩니다. 모르면 ‘확인 필요’라고 적어요.</p>{questionFields.map(([key,label,hint])=><label key={key}>{label}<textarea aria-label={label} rows={2} maxLength={700} value={value.answers[key]} placeholder={hint} onChange={e=>{setValue({...value,answers:{...value.answers,[key]:e.target.value},ready:false,definition:{...value.definition,solutionReviewed:false}});setSaved('');}}/><small>{hint}</small></label>)}</>:<>
@@ -48,6 +52,13 @@ export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePa
    {panel==='definition'&&scope!=='cohort'&&!teamOnly&&<p className="refinement-hint">투표에 참여하려면 공개 범위를 ‘기수 전체’로 바꿔주세요.</p>}
    </fieldset>
   </form>
+  {coach&&<div className="write-aside">
+   <AICoach key={idea.id+panel} phase={panel} ask={coach} aiEnabled={aiEnabled} disabled={busy||conflict} context={{title:idea.title,body:idea.body}}
+    values={panel==='questions'?{...value.answers}:Object.fromEntries(definitionFields.map(([k])=>[k,value.definition[k]]))}
+    onApply={(k,t)=>{setSaved('');setValue(v=>panel==='questions'?{...v,answers:{...v.answers,[k]:t},ready:false,definition:{...v.definition,solutionReviewed:false}}:{...v,definition:{...v.definition,[k]:t,solutionReviewed:false},ready:false});}}/>
+   <CardPreview phase={panel} member={owner} title={idea.title} refinement={value}/>
+  </div>}
+  </div>
   {error&&<p role="alert" className="refinement-conflict">{error}</p>}
   {saved&&<p className="refinement-saved" role="status">{saved}</p>}
   <RefinementSummary value={idea.refinement}/>

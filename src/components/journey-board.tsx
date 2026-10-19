@@ -33,7 +33,7 @@ export function JourneyBoard(p:BoardProps){
   {step!==1&&<header className="journey-intro"><div><span className="journey-kicker">STEP 0{step} · 이번에 남길 것</span><h2>{spec.title}</h2><p>{spec.hint}</p></div><span className="journey-output">{spec.output}<small>{status[step-1]?"내 기록이 있어요 · 이어서 다듬기":"아래에서 시작하세요"}</small></span></header>}
   {ended&&<p className="journey-closed">종료된 기수입니다. 남긴 카드와 변화 과정을 둘러보세요.</p>}
   {step===1&&<>
-   <IdeaStart workspace={w} busy={p.busy} ended={!!ended} scope={p.scope} save={p.saveIdea} onIdea={p.onIdea} startRequest={p.startRequest} />
+   <IdeaStart workspace={w} busy={p.busy} ended={!!ended} scope={p.scope} save={p.saveIdea} onIdea={p.onIdea} startRequest={p.startRequest} coach={p.askCoach} aiEnabled={p.ai?.enabled} />
    {currentActivity&&<button className="journey-activity" onClick={()=>p.onNavigate("activities")}><span>진행자가 연 활동<strong>{currentActivity.data.question}</strong></span>활동에 답변하기 <ArrowRight size={17}/></button>}
    <div className="journey-board-heading"><div><h3>{p.scope==="project"?"우리 팀의 생각 보드":"함께 보는 생각 보드"}</h3><p>생각부터 문제정의까지 단계별로 펼쳐보고, 각 카드에 피드백을 남겨주세요.</p></div><button className="secondary-button" aria-pressed={mine} onClick={()=>setMine(!mine)}>{mine?"모두의 카드 보기":"내 카드만 보기"}</button></div>
    <IdeaExhibition workspace={w} ideas={cards} busy={p.busy} ended={!!ended} save={p.saveIdea} onIdea={p.onIdea} loadMore={p.loadMore}/>

@@ -4,8 +4,11 @@ import {ArrowRight,Check,Lock,Plus} from 'lucide-react';
 import {IdeaRefinement} from './idea-refinement';
 import {answered,questionFields} from '@/lib/refinement';
 import type {Command,Workspace} from '@/lib/types';
+import type {CoachAsk} from '@/lib/coaching';
+import {AICoach} from './ai-coach';
+import {CardPreview} from './card-view';
 type Stage='thought'|'questions'|'definition';
-type Props={workspace:Workspace;busy:boolean;ended:boolean;scope:'me'|'cohort'|'project';startRequest:number;onIdea:(id:string)=>void;save:(c:Command,onResult?:(result:{id?:string})=>void)=>Promise<boolean>};
+type Props={workspace:Workspace;busy:boolean;ended:boolean;scope:'me'|'cohort'|'project';startRequest:number;coach?:CoachAsk;aiEnabled?:boolean;onIdea:(id:string)=>void;save:(c:Command,onResult?:(result:{id?:string})=>void)=>Promise<boolean>};
 export function IdeaStart(p:Props){
  const [id,setId]=useState(''),[stage,setStage]=useState<Stage>('thought'),[title,setTitle]=useState(''),[body,setBody]=useState(''),[privateNote,setPrivateNote]=useState(false),[saved,setSaved]=useState(false);
  const section=useRef<HTMLElement>(null), me=p.workspace.me;
@@ -26,12 +29,12 @@ export function IdeaStart(p:Props){
     <label className="journey-private"><input type="checkbox" checked={privateNote} onChange={e=>setPrivateNote(e.target.checked)} disabled={p.busy||p.ended}/><Lock size={13}/> 아직은 나만 볼게요</label>
     <div className="journey-write-footer"><small>{privateNote?'나만 보는 기록으로 시작해요':'저장한 생각이 공유 보드에 올라갑니다'}</small><button className="primary-button" disabled={p.busy||p.ended||!title.trim()||!body.trim()}><ArrowRight size={16}/>{p.busy?'저장 중…':'카드 올리기'}</button></div><p className="start-next-hint">저장 후 바로 02 · 경험 구체화를 입력합니다.</p>
    </form>
-   <aside className="start-question-preview"><span className="journey-card-label">02 · 다음에 적을 내용</span><h3>이 생각을 다섯 질문으로 구체화해요.</h3><p>처음 생각을 저장하면 여기서 답변을 이어갑니다.</p><ol>{questionFields.map(([,label])=><li key={label}>{label}</li>)}</ol><span className="start-preview-end">그다음 · 문제정의 문장과 통제범위 <ArrowRight size={14}/></span></aside>
+   {p.coach?<div className="write-aside"><AICoach phase="thought" ask={p.coach} aiEnabled={p.aiEnabled} disabled={p.busy||p.ended} values={{title,body}} context={{title,body}} onApply={(k,t)=>k==='title'?setTitle(t.slice(0,120)):setBody(t)}/><CardPreview phase="thought" member={me} title={title} body={body}/></div>:<aside className="start-question-preview"><span className="journey-card-label">02 · 다음에 적을 내용</span><h3>이 생각을 다섯 질문으로 구체화해요.</h3><p>처음 생각을 저장하면 여기서 답변을 이어갑니다.</p><ol>{questionFields.map(([,label])=><li key={label}>{label}</li>)}</ol><span className="start-preview-end">그다음 · 문제정의 문장과 통제범위 <ArrowRight size={14}/></span></aside>}
   </div>}
   {idea&&<>
    <div className="start-source"><div><small>01 · 저장한 처음 생각</small><h4>{idea.title}</h4><p>{idea.body}</p></div><button type="button" className="secondary-button" disabled={p.busy} onClick={()=>p.onIdea(idea.id)}>원문·변화 이력</button></div>
    {stage==='thought'&&<div className="start-continue"><button className="primary-button" onClick={()=>setStage('questions')}>다섯 질문 이어쓰기 <ArrowRight size={16}/></button></div>}
-   <div hidden={stage==='thought'} className="start-editor"><IdeaRefinement key={idea.id} idea={idea} editable={!p.ended} hasProject={!!me.projectId} busy={p.busy} run={p.save} activePanel={stage==='definition'?'definition':'questions'} onPanelChange={setStage}/></div>
+   <div hidden={stage==='thought'} className="start-editor"><IdeaRefinement key={idea.id} idea={idea} editable={!p.ended} hasProject={!!me.projectId} busy={p.busy} run={p.save} activePanel={stage==='definition'?'definition':'questions'} onPanelChange={setStage} coach={p.coach} aiEnabled={p.aiEnabled} owner={me}/></div>
    <div className="start-bottom"><span>저장한 답변과 초안은 아래 단계별 보드에서 함께 볼 수 있어요.</span><button className="secondary-button" disabled={p.busy} onClick={fresh}><Plus size={14}/>새 생각 시작</button><button className="secondary-button" onClick={()=>document.getElementById('idea-exhibition')?.scrollIntoView({block:'start',behavior:'smooth'})}>저장한 내용·피드백 보기</button></div>
   </>}
  </section>;

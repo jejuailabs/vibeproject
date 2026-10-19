@@ -173,3 +173,54 @@
 .gallery-empty{background:#fff;border-radius:16px;padding:28px;text-align:center;display:grid;gap:12px;justify-items:center;color:#7d7190;font-size:13px}
 .gallery .primary-button{background:#7854b8;color:#fff}
 @media(max-width:600px){.exhibit{padding:16px}.gallery-search{min-width:0;width:100%}}
+
+/* Writing layout: the form on the left, the AI coach and a live wall preview on the right. */
+.write-grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(280px,1fr);gap:18px;align-items:start}
+.write-aside{display:grid;gap:12px;position:sticky;top:12px;min-width:0}
+@media(max-width:900px){.write-grid{grid-template-columns:1fr}.write-aside{position:static}}
+.coach{display:grid;gap:10px;background:#fff;border:1px solid #dccbf2;border-radius:14px;padding:14px;color:#3e3249;min-width:0;box-shadow:0 6px 22px #7854b814}
+.coach header{display:flex;gap:10px;align-items:center}
+.coach header strong{display:block;font-size:14px;color:#2c2937}
+.coach header small{display:block;font-size:11px;color:#8e869a;margin-top:2px;line-height:1.5}
+.coach-mark{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#7854b8,#ff8f6b);color:#fff;flex-shrink:0}
+.coach-fields{display:flex;flex-wrap:wrap;gap:5px}
+.coach-fields button{display:inline-flex;align-items:center;gap:4px;max-width:150px;border:1px solid #e6dcf0;background:#fbf9fd;color:#6f6480;border-radius:999px;padding:4px 9px;font-size:11px;cursor:pointer}
+.coach-fields button span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.coach-fields button.filled{background:#eef8f2;border-color:#bfe3cd;color:#2f7a52}
+.coach-fields button.on{background:#7854b8;border-color:#7854b8;color:#fff}
+.coach-log{list-style:none;margin:0;padding:2px;display:flex;flex-direction:column;gap:8px;max-height:280px;overflow-y:auto}
+.coach-log li{max-width:88%;font-size:13px;line-height:1.6;padding:9px 12px;border-radius:12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.coach-log li.coach{align-self:flex-start;background:#f4effb;color:#3e3249;border-top-left-radius:4px}
+.coach-log li.me{align-self:flex-end;background:#7854b8;color:#fff;border-top-right-radius:4px}
+.coach-log li.wait{display:flex;align-items:center;gap:6px;color:#8e869a}
+.coach-proposal{display:grid;gap:8px;background:#fff8f1;border:1px solid #f6d6bd;border-radius:12px;padding:10px}
+.coach-proposal small{font-size:11px;font-weight:700;color:#a35a2a}
+.coach-proposal textarea{width:100%;border:1px solid #f0d8c5;border-radius:8px;padding:9px;font-size:13px;line-height:1.6;background:#fff;color:#3e3249;resize:vertical}
+.coach-proposal div{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.coach .primary-button{background:#7854b8;color:#fff;border:0}
+.coach .secondary-button{background:#fff;color:#5e3f93;border:1px solid #d9cceb}
+.coach-input{display:flex;gap:8px;align-items:flex-end}
+.coach-input textarea{flex:1;min-width:0;border:1px solid #e3d9eb;border-radius:10px;padding:10px;font-size:13px;line-height:1.5;resize:none;background:#fdfcfe;color:#3e3249}
+.coach-input button{height:40px;width:44px;justify-content:center;padding:0}
+.coach-error{font-size:12px;color:#b3261e;background:#fdecea;border-radius:8px;padding:8px 10px}
+.card-preview{display:grid;gap:6px}
+.card-preview-label{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#7854b8}
+.card-preview .steps-card{box-shadow:0 0 0 3px #7854b81a}
+
+/* Wall cards open the full card. */
+.steps-card.open{cursor:pointer;transition:border-color .15s,box-shadow .15s,transform .15s}
+.steps-card.open:hover,.steps-card.open:focus-visible{border-color:#7854b8;box-shadow:0 6px 18px #7854b822;transform:translateY(-1px);outline:none}
+.steps-card footer{align-items:center;gap:8px}
+.steps-open-hint{margin-right:auto;font-size:10px;color:#a59bb0}
+.steps-card .text-button{display:inline-flex;align-items:center;gap:4px;font-size:12px}
+
+/* Full card content in the detail view. */
+.card-full{display:grid;gap:16px;margin-top:12px}
+.card-full h4{font-size:13px;color:#7854b8;margin:0 0 8px;display:flex;gap:8px;align-items:baseline}
+.card-full h4 small{font-size:11px;color:#9a8ea8;font-weight:500}
+.card-full dl{margin:0;display:grid;gap:10px}
+.card-full dt{font-size:11px;font-weight:700;color:#8a63c2}
+.card-full dd{margin:3px 0 0;font-size:13px;line-height:1.65;color:#3e3249;white-space:pre-wrap;overflow-wrap:anywhere}
+.card-full dd.empty{color:#b2a8bd}
+.card-full blockquote{margin:0 0 12px;border-left:3px solid #ffab8a;padding:6px 0 6px 12px;font-size:14px;font-weight:700;color:#3e3249;line-height:1.6}
+.card-full-empty{font-size:13px;color:#8e869a}

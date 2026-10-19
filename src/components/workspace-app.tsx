@@ -88,7 +88,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  useEffect(()=>{if(selected&&!detailRef.current?.open)detailRef.current?.showModal();else if(!selected)detailRef.current?.close();},[selected]);
  useEffect(()=>{if(action&&!actionRef.current?.open)actionRef.current?.showModal();else if(!action)actionRef.current?.close();},[action]);
  useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),4000);return()=>clearTimeout(timer);},[notice]);
- async function login(){setLoading(true);setError('');try{await signInWithPopup(clientAuth(),new GoogleAuthProvider());}catch{setError('로그인을 완료하지 못했습니다. Google 로그인 설정과 허용 도메인을 확인해주세요.');setLoading(false);}}
+ async function login(){setLoading(true);setError('');try{const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});await signInWithPopup(clientAuth(),provider);}catch{setError('로그인을 완료하지 못했습니다. Google 로그인 설정과 허용 도메인을 확인해주세요.');setLoading(false);}}
  async function run(command:Command,onResult?:(result:{id?:string})=>void):Promise<boolean>{
   setBusy(true);setError('');
   try{
