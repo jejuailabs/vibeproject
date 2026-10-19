@@ -1,7 +1,8 @@
 import type { Context } from "./model";
 import type { WorkshopCommand } from "./commands";
-import type { Project } from "../types";
-import { statement } from "../refinement";
+import type { Idea, Project } from "../types";
+import { problemMarkdown, statement } from "../refinement";
+import { docNames } from "./model";
 import {
   fail,
   path,
@@ -15,6 +16,7 @@ import {
   project,
   idea,
   ideaHistory,
+  optional,
 } from "./core";
 
 // Join passwords live outside projects/projectDirectory so no client response ever carries the hash.
@@ -187,9 +189,50 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
         },
       });
       ideaHistory(c, i, "프로젝트 문제로 확정", cmd.reason);
+      // The confirmed card becomes the first planning document right away; earlier text stays in its versions.
+      const docId = "doc-" + p.id + "-product", oldDoc = await optional(c, docId, "document");
+      const markdown = problemMarkdown(i), docReason = "확정한 문제 카드에서 작성 · " + cmd.reason;
+      write(c, "draft-version-" + c.requestId, "version", { key: "product", title: docNames.product, markdown, documentRevision: (oldDoc?.revision || 0) + 1, reason: docReason }, "project", p.id);
+      write(c, docId, "document", { key: "product", title: docNames.product, markdown, reason: docReason }, "project", p.id, oldDoc?.ownerId || c.uid, oldDoc);
       event(c, "문제 확정", text, p.id, p.id);
       for (const uid of p.memberIds)
         if (uid !== c.uid) notify(c, uid, "리더가 프로젝트 문제를 확정했습니다.", p.id, "project");
+      return { id: p.id };
+    }
+    case "openTeamVote": {
+      const p = await project(c, cmd.projectId, "leader");
+      const listed = await c.store.list<Idea>(path(c, "ideas"), [{ field: "projectId", value: p.id }]);
+      if (p.sourceIdeaId && !listed.some((i) => i.id === p.sourceIdeaId)) listed.push(await idea(c, p.sourceIdeaId));
+      const ideas = listed.filter((i) => i.refinement?.ready && i.state !== "closed_unselected");
+      if (ideas.length < 1) fail("완성된 문제 카드가 있어야 투표를 열 수 있습니다.");
+      const old = await optional(c, "teamvote-" + p.id, "teamVote");
+      if (old?.data.state === "open") fail("이미 투표가 열려 있습니다.");
+      write(c, "teamvote-" + p.id, "teamVote", { round: (old?.data.round || 0) + 1, state: "open", candidateIds: ideas.map((i) => i.id), counts: {}, voters: 0, openedAt: c.now, closedAt: null }, "project", p.id, c.uid, old);
+      event(c, "투표 열기", "문제 카드 " + ideas.length + "개", p.id, p.id);
+      for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "리더가 함께 풀 문제 투표를 열었습니다.", p.id, "project");
+      return { id: p.id };
+    }
+    case "castTeamVote": {
+      const p = await project(c, cmd.projectId);
+      const vote = await optional(c, "teamvote-" + p.id, "teamVote");
+      if (vote?.data.state !== "open") fail("열려 있는 투표가 없습니다.");
+      if (!vote.data.candidateIds.includes(cmd.ideaId)) fail("투표 후보 카드만 고를 수 있습니다.");
+      const ballotId = "teamballot-" + p.id + "-" + c.uid;
+      const prior = await optional(c, ballotId, "teamBallot");
+      const counts = { ...vote.data.counts };
+      const same = prior?.data.round === vote.data.round;
+      if (same) counts[prior.data.ideaId] = Math.max(0, (counts[prior.data.ideaId] || 0) - 1);
+      counts[cmd.ideaId] = (counts[cmd.ideaId] || 0) + 1;
+      write(c, ballotId, "teamBallot", { round: vote.data.round, ideaId: cmd.ideaId }, "project", p.id, c.uid, prior);
+      write(c, vote.id, "teamVote", { ...vote.data, counts, voters: vote.data.voters + (same ? 0 : 1) }, "project", p.id, vote.ownerId, vote);
+      return { id: p.id };
+    }
+    case "closeTeamVote": {
+      const p = await project(c, cmd.projectId, "leader");
+      const vote = await optional(c, "teamvote-" + p.id, "teamVote");
+      if (vote?.data.state !== "open") fail("열려 있는 투표가 없습니다.");
+      write(c, vote.id, "teamVote", { ...vote.data, state: "closed", closedAt: c.now }, "project", p.id, vote.ownerId, vote);
+      event(c, "투표 마감", vote.data.voters + "명 참여", p.id, p.id);
       return { id: p.id };
     }
     case "projectAccess": {

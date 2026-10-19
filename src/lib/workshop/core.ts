@@ -67,7 +67,7 @@ export function canRead(c: Context, r: WorkshopRecord) {
     );
   if (r.kind === "report") return r.ownerId === c.uid || c.me.role === "admin";
   if (r.kind === "readiness" && c.me.role === "admin") return true;
-  if (r.kind === "notification" || r.kind === "ballot" || r.kind === "read")
+  if (r.kind === "notification" || r.kind === "ballot" || r.kind === "teamBallot" || r.kind === "read")
     return r.ownerId === c.uid;
   if (r.kind === "join")
     return (

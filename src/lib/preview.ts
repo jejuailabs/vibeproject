@@ -53,7 +53,7 @@ export function previewCommand(state:Workspace,command:Command):Workspace {
    if(command.scope==='project'&&!next.me.projectId)throw new Error('프로젝트에 먼저 참여해주세요.');
    if(command.scope!==idea.scope&&command.scope!=='owner'&&next.activity.state!=='open')throw new Error('현재 활동이 마감되어 공유 범위를 바꿀 수 없습니다.');
    idea.refinement=nextRefinement(idea,command.phase,command.input,command.reason);idea.scope=command.scope;idea.projectId=command.scope==='project'?next.me.projectId:null;idea.revision++;idea.version++;idea.updatedAt=now;
-   record(idea,command.phase==='questions'?'다섯 질문으로 경험 구체화':'문제정의 초안 '+idea.refinement.draft+(idea.refinement.ready?' · 선정 준비':''),command.reason);
+   record(idea,command.phase==='questions'?'경험 질문에 답함':'문제정의 초안 '+idea.refinement.draft+(idea.refinement.ready?' · 선정 준비':''),command.reason);
   }
   else if(command.type==='editIdea'){assertEditable(next.me,idea,command.revision);idea.title=command.title;idea.body=command.body;if(idea.refinement)idea.refinement={...idea.refinement,ready:false,definition:{...idea.refinement.definition,solutionReviewed:false}};idea.revision++;idea.version++;idea.updatedAt=now;record(idea,'생각을 구체화했어요',command.reason);}
   else if(command.type==='closeIdea'){assertAdmin(next.me);idea.state='closed_unselected';idea.revision++;record(idea,'아이디어 종료',command.reason);}

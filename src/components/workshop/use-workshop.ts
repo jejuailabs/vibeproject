@@ -11,7 +11,7 @@ import type {
 import { previewWorkshop } from "@/lib/workshop/memory";
 import { canRead } from "@/lib/workshop/core";
 import { baselineArchive } from "@/lib/workshop/export";
-import { basicCoach, type CoachInput, type CoachReply } from "@/lib/coaching";
+import { basicCard, basicCoach, type CardInput, type CardReply, type CoachInput, type CoachReply } from "@/lib/coaching";
 export function useWorkshop({
   data,
   setData,
@@ -147,6 +147,17 @@ export function useWorkshop({
     });
     const value = await response.json();
     if (!response.ok) throw new Error(value.error || "AI 코치가 답하지 못했어요.");
+    return value;
+  }
+  async function makeCard(input: CardInput): Promise<CardReply> {
+    if (preview || !user) return basicCard(input);
+    const response = await fetch("/api/coach", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await user.getIdToken()) },
+      body: JSON.stringify({ cohortId, kind: "card", ...input }),
+    });
+    const value = await response.json();
+    if (!response.ok) throw new Error(value.error || "AI가 문제 카드를 만들지 못했어요.");
     return value;
   }
   function saveBlob(blob: Blob, name: string) {
@@ -342,6 +353,7 @@ export function useWorkshop({
     busy,
     run,
     askCoach,
+    makeCard,
     upload,
     download,
     exportBaseline,

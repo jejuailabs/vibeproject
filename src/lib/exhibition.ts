@@ -5,7 +5,7 @@ import type {Idea,HistoryEvent,FeedbackContext,Comment} from './types';
 export const feedbackContextSchema=z.object({stage:z.enum(['thought','questions','definition','ready']),revision:z.number().int().positive()});
 export const exhibitionStages=[
  {id:'thought',name:'처음 생각',hint:'작은 경험과 막연한 생각'},
- {id:'questions',name:'경험 구체화',hint:'다섯 질문으로 상황을 더 자세히'},
+ {id:'questions',name:'경험 구체화',hint:'질문 세 개로 상황을 더 자세히'},
  {id:'definition',name:'문제정의 초안',hint:'초안 1·2와 바뀐 이유'},
  {id:'ready',name:'선정 준비',hint:'함께 풀 문제로 정리한 최신 카드'},
 ] as const;

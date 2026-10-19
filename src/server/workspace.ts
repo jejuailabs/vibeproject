@@ -168,7 +168,7 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
     }
     const refinement=nextRefinement(idea,command.phase,command.input,command.reason);
     const next={...idea,refinement,scope:command.scope,projectId:command.scope==='project'?me.projectId:null,revision:idea.revision+1,version:idea.version+1,updatedAt:now};
-    tx.update(ref,next);history(next,command.phase==='questions'?'다섯 질문으로 경험 구체화':'문제정의 초안 '+refinement.draft+(refinement.ready?' · 선정 준비':''),command.reason);result={id:ideaId};
+    tx.update(ref,next);history(next,command.phase==='questions'?'경험 질문에 답함':'문제정의 초안 '+refinement.draft+(refinement.ready?' · 선정 준비':''),command.reason);result={id:ideaId};
    } else if(command.type==='editIdea') {
     assertEditable(me,idea,command.revision);
     const next={...idea,...(idea.refinement?{refinement:{...idea.refinement,ready:false,definition:{...idea.refinement.definition,solutionReviewed:false}}}:{}),title:command.title,body:command.body,revision:idea.revision+1,version:idea.version+1,updatedAt:now};

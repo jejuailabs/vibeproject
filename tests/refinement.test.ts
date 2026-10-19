@@ -9,7 +9,7 @@ const save=(i:Idea,input=emptyRefinement(),phase:'questions'|'definition'='quest
 test('partial answers persist; definition revisions preserve snapshots and invalidate readiness on changes',()=>{
  let s=fresh(),i=s.ideas[0],input=emptyRefinement();input.answers.who='첫 참가자';
  s=previewCommand(s,save(i,input));i=s.ideas[0];assert.equal(i.refinement?.answers.who,'첫 참가자');
- assert.throws(()=>nextRefinement(i,'definition',input,'초안'),/다섯 질문/);
+ assert.throws(()=>nextRefinement(i,'definition',input,'초안'),/경험 질문/);
  input=structuredClone(previewWorkspace().ideas[0].refinement!);input.ready=false;
  s=previewCommand(s,save(i,input,'definition'));i=s.ideas[0];assert.equal(i.refinement?.draft,1);
  const previous=structuredClone(s.events[0]);input.definition.focus='시작 전 5분';input.ready=true;
@@ -23,17 +23,19 @@ test('only author edits, stale revisions and frozen candidates reject updates',(
  const next=previewCommand(s,cmd);assert.throws(()=>previewCommand(next,cmd),/다른 변경/);
  s.ideas[0].state='candidate';assert.throws(()=>previewCommand(s,cmd),/원본/);
 });
-test('completion requires all fields and review; keyword hints do not prevent drafts',()=>{
+test('a finished card needs the three answers and the card sentence; keyword hints do not prevent drafts',()=>{
  const i=fresh().ideas[0],input=structuredClone(previewWorkspace().ideas[0].refinement!);
  input.definition.who='앱을 만드는 사람';input.definition.solutionReviewed=false;
- assert.equal(solutionHints(input),true);assert.throws(()=>nextRefinement(i,'definition',input,'검토'),/확인/);
+ assert.equal(solutionHints(input),true);assert.equal(nextRefinement(i,'definition',input,'완성').ready,true);
+ input.definition.control='';input.definition.outside='';assert.equal(nextRefinement(i,'definition',input,'완성').ready,true);
+ input.definition.focus='';assert.throws(()=>nextRefinement(i,'definition',input,'완성'),/문제 카드/);
  input.ready=false;assert.equal(nextRefinement(i,'definition',input,'임시 저장').draft,1);
- input.ready=true;input.definition.solutionReviewed=true;input.definition.control='';assert.throws(()=>nextRefinement(i,'definition',input,'확정'),/통제범위/);
+ input.ready=true;input.definition.focus='시작 전 10분';input.definition.cause='';assert.throws(()=>nextRefinement(i,'definition',input,'완성'),/문제 카드/);
 });
 test('vote rejects unfinished cards and freezes full problem definition; project starts with its statement',async()=>{
  let workspace=fresh();
  const vote={type:'openVote',title:'문제 선정',candidateIds:['i1'],budget:1,allowSelfVote:true,closesAt:'2099-01-01T00:00:00Z'};
- await assert.rejects(previewWorkshop({workspace,records:[]},vote),/선정 준비/);
+ await assert.rejects(previewWorkshop({workspace,records:[]},vote),/완성/);
  workspace=previewCommand(workspace,save(workspace.ideas[0],previewWorkspace().ideas[0].refinement!,'definition'));
  let s=await previewWorkshop({workspace,records:[]},vote);const round=s.records.find(r=>r.kind==='round')!;
  assert.deepEqual(round.data.candidates[0].refinement,workspace.ideas[0].refinement);

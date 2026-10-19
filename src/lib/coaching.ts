@@ -10,20 +10,13 @@ export type CoachAsk=(input:CoachInput)=>Promise<CoachReply>;
 export type CoachInput={phase:CoachPhase;field:string;answer:string;values:Record<string,string>;context:{title:string;body:string};history:CoachTurn[]};
 const opening:Record<string,string>={
  title:'최근에 "아, 불편하다" 싶었던 순간이 있었나요? 한 줄로 편하게 말해주세요.',
- body:'그 일은 언제, 어디서, 누구와 있을 때 일어났나요? 그때 무엇이 불편했는지 떠오르는 대로 말해주세요.',
- who:'이 불편을 실제로 겪는 사람은 누구인가요? 나 자신이라면 어떤 상황의 나인지 말해주세요.',
- whenWhere:'그 일은 주로 언제, 어디서 일어나나요?',
- blocked:'그 순간 무엇을 하려고 했고, 어디서 막혔나요?',
- workaround:'지금은 그 상황을 어떻게 넘기고 있나요? 포기하는 것도 답이 될 수 있어요.',
- frequency:'이런 일이 얼마나 자주 있나요? 정확히 모르면 짐작이나 "확인 필요"도 괜찮아요.',
- why:'그 상황 때문에 무엇을 잃거나 힘들어지나요?',
- change:'이 문제가 풀리면 그 사람의 하루나 행동이 어떻게 달라질까요? 만들 기능 말고 사람의 변화로 말해주세요.',
- situation:'문제정의 문장에 들어갈 "어떤 상황에서"를 정해볼게요. 그 어려움이 생기는 순간을 짧게 말해주세요.',
- cause:'그 어려움은 무엇 때문에 생기나요? 원인이라고 생각하는 것을 말해주세요.',
- difficulty:'결국 그 사람이 겪는 어려움을 한마디로 하면 무엇인가요?',
- control:'이 중에서 우리가 직접 바꿔볼 수 있는 부분은 무엇인가요?',
- outside:'다른 사람이나 기관의 협조가 필요하거나 우리가 바꾸기 어려운 부분은 무엇인가요? 없으면 없다고 말해주세요.',
- focus:'4주 동안 이 중 어디까지를 작게 확인해볼까요?',
+ body:'그 일은 언제, 어디서 있었나요? 무엇이 불편했는지 떠오르는 대로 말해주세요.',
+ who:'이 일을 겪는 사람은 누구인가요? 나 자신이라면 "나"라고 해도 돼요.',
+ whenWhere:'그 일은 언제 생기나요? 그때 무엇을 하려다 막혔나요?',
+ workaround:'지금은 그럴 때 어떻게 넘기고 있나요? 그런 일이 얼마나 자주 있나요?',
+ why:'그 일 때문에 무엇이 힘들거나 아쉬운가요? 시간, 기분, 놓친 기회 같은 것도 좋아요.',
+ change:'이게 풀리면 그 사람은 어떻게 달라질까요? 만들 앱 말고 사람의 변화로 말해주세요.',
+ focus:'4주 동안 어디까지 해볼까요? 작게 정할수록 좋아요.',
 };
 export function coachFields(phase:CoachPhase):CoachField[]{
  if(phase==='thought')return [{key:'title',label:'무슨 일이었나요?',hint:'한 줄 제목',max:120},{key:'body',label:'언제, 누구에게, 무엇이 불편했나요?',hint:'겪은 일',max:5000}];
@@ -31,7 +24,6 @@ export function coachFields(phase:CoachPhase):CoachField[]{
  return src.map(([key,label,hint])=>({key,label,hint,max:700}));
 }
 export function coachQuestion(phase:CoachPhase,field:string){
- if(phase==='definition'&&field==='who')return '문제정의 문장의 "누가"를 정해볼게요. 이 어려움을 겪는 사람을 구체적으로 말해주세요.';
  return opening[field]||coachFields(phase).find(f=>f.key===field)?.label||'';
 }
 export function nextOpenField(phase:CoachPhase,values:Record<string,string>,after?:string){
@@ -50,5 +42,18 @@ export function basicCoach(input:Pick<CoachInput,'phase'|'field'|'answer'|'value
  const f=coachFields(input.phase).find(f=>f.key===input.field)!,answer=input.answer.trim().slice(0,f.max);
  if(answer.length<4)return {reply:'조금만 더 구체적으로 말해줄래요? '+(f.hint||''),suggestion:'',needsMore:true,engine:'basic'};
  const next=nextOpenField(input.phase,{...input.values,[f.key]:answer},f.key);
- return {reply:'좋아요. 아래 내용을 "'+f.label+'" 칸에 넣을 수 있어요.'+(next?' 넣고 나면 다음 질문으로 넘어갈게요.':' 넣고 나면 모든 칸이 채워져요. 확인하고 저장해주세요.'),suggestion:answer,needsMore:false,engine:'basic'};
+ return {reply:'좋아요. 아래 내용을 "'+f.label+'" 칸에 넣을 수 있어요.'+(next?' 넣고 나면 다음 질문으로 넘어갈게요.':' 넣고 나면 모든 칸이 채워져요.'),suggestion:answer,needsMore:false,engine:'basic'};
+}
+
+// Problem card: after steps 2 and 3, the six answers become one sentence "[누가]는 [상황]에 [원인] 때문에 [어려움]을 겪는다".
+export type CardInput={title:string;body:string;answers:Record<string,string>;definition:Record<string,string>};
+export type CardReply={who:string;situation:string;cause:string;difficulty:string;engine:'ai'|'basic'};
+export type CardAsk=(input:CardInput)=>Promise<CardReply>;
+const short=z.string().max(700);
+export const cardRequest=z.object({cohortId:id,kind:z.literal('card'),title:z.string().max(120),body:z.string().max(5000),answers:z.record(z.string().max(30),short),definition:z.record(z.string().max(30),short)}).strict();
+export const cardOutput=z.object({who:z.string().min(1).max(200),situation:z.string().min(1).max(300),cause:z.string().min(1).max(300),difficulty:z.string().min(1).max(300)}).strict();
+const clip=(v:string|undefined,n=120)=>(v||'').trim().split(/[.,\n]/)[0].replace(/(이에요|예요|에요|해요|어요|아요|요)$/,'').slice(0,n).trim();
+// Without AI only the parts that can be copied safely are filled; the writer finishes cause and difficulty.
+export function basicCard(i:CardInput):CardReply{
+ return {who:clip(i.answers.who),situation:clip(i.answers.whenWhere),cause:'',difficulty:'',engine:'basic'};
 }
