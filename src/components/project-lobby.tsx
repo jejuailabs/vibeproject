@@ -1,6 +1,6 @@
 "use client";
 import { useMemo, useState, type FormEvent } from "react";
-import { ArrowRight, Check, Copy, KeyRound, Link2, Lock, LogIn, Plus, Search, Settings2, Unlock, UserCheck, Users } from "lucide-react";
+import { ArrowRight, Check, Copy, KeyRound, Link2, Lock, Plus, Search, Settings2, Unlock, UserCheck, Users } from "lucide-react";
 import type { JoinPolicy, Project, Workspace } from "@/lib/types";
 import type { RecordOf, WorkshopRecord } from "@/lib/workshop/model";
 import { projectIdsOf } from "@/lib/policy";
@@ -28,8 +28,8 @@ type Props = {
 export function ProjectLobby({ workspace: w, records, busy, preview, invite, run, onEnter, onInviteHandled }: Props) {
   const me = w.me,
     mine = projectIdsOf(me);
-  // Open on the list of existing projects whenever there is one to join; creating is the fallback.
-  const [mode, setMode] = useState<"join" | "create">(mine.length || w.projects.some((p) => !mine.includes(p.id) && p.mode !== "solo") ? "join" : "create");
+  // Existing projects lead; the create form opens from a small button, or by itself when there is nothing to join.
+  const [creating, setCreating] = useState(!w.projects.some((p) => !mine.includes(p.id) && p.mode !== "solo"));
   const [query, setQuery] = useState(""),
     [passwords, setPasswords] = useState<Record<string, string>>({}),
     [copied, setCopied] = useState(false),
@@ -194,21 +194,16 @@ export function ProjectLobby({ workspace: w, records, busy, preview, invite, run
         </div>
       )}
 
-      <div className="lobby-block">
-        <div className="lobby-heading">
-          <span className="lobby-step">{myProjects.length ? "다른 프로젝트" : "시작하기"}</span>
-          <h2>프로젝트를 만들거나 참여하세요</h2>
+      <div className="lobby-block lobby-join">
+        <div className="lobby-heading lobby-heading-row">
+          <div>
+            <span className="lobby-step">{myProjects.length ? "다른 프로젝트" : "참여할 프로젝트"}</span>
+            <h2>{others.length ? `지금 참여할 수 있는 프로젝트 ${others.length}개` : "아직 참여할 수 있는 프로젝트가 없어요"}</h2>
+            {others.length > 0 && <p>마음에 드는 프로젝트의 참여 버튼을 누르세요.</p>}
+          </div>
+          <button type="button" className={"lobby-create-toggle" + (creating ? " on" : "")} aria-expanded={creating} onClick={() => setCreating((v) => !v)}><Plus size={14} /> {creating ? "만들기 닫기" : "새 프로젝트 만들기"}</button>
         </div>
-        <div className="lobby-choice" role="tablist" aria-label="시작 방법">
-          <button role="tab" aria-selected={mode === "create"} className={mode === "create" ? "active" : ""} onClick={() => setMode("create")}>
-            <Plus size={20} /><span><strong>프로젝트 만들기</strong><small>내가 리더가 되어 팀원을 모아요</small></span>
-          </button>
-          <button role="tab" aria-selected={mode === "join"} className={mode === "join" ? "active" : ""} onClick={() => setMode("join")}>
-            <LogIn size={20} /><span><strong>프로젝트 참여하기</strong><small>만들어진 프로젝트 {others.length}개 중에서 골라요</small></span>
-          </button>
-        </div>
-
-        {mode === "create" ? (
+        {creating && (
           <form className="lobby-form" onSubmit={create}>
             <label>
               <span className="lobby-num">1</span> 프로젝트 이름
@@ -240,18 +235,16 @@ export function ProjectLobby({ workspace: w, records, busy, preview, invite, run
               <button className="primary-button" disabled={busy || !name.trim()}>프로젝트 만들기 <ArrowRight size={15} /></button>
             </div>
           </form>
-        ) : (
+        )}
+        {(others.length > 0 || query) && (
           <div className="lobby-list">
-            <label className="lobby-search">
-              <Search size={15} />
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="프로젝트 이름이나 소개로 찾기" aria-label="프로젝트 찾기" />
-            </label>
-            {others.length === 0 ? (
-              <div className="lobby-empty">
-                <p>{query ? "찾는 프로젝트가 없어요." : "아직 참여할 수 있는 프로젝트가 없어요."}</p>
-                <button className="text-button" onClick={() => setMode("create")}>직접 프로젝트 만들기 <ArrowRight size={14} /></button>
-              </div>
-            ) : (
+            {(others.length > 5 || query) && (
+              <label className="lobby-search">
+                <Search size={15} />
+                <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="프로젝트 이름이나 소개로 찾기" aria-label="프로젝트 찾기" />
+              </label>
+            )}
+            {others.length === 0 ? <div className="lobby-empty"><p>찾는 프로젝트가 없어요.</p></div> : (
               others.map((p) => {
                 const joinPolicy = p.joinPolicy || "request",
                   full = p.memberIds.length >= (p.capacity || 100),
