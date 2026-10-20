@@ -39,7 +39,7 @@ const coachInstructions =
   "For the title field, the suggestion must be ONE short sentence (under 60 characters). " +
   "If the writer names an app, feature or service as the answer, gently ask what the person experiences instead.";
 
-async function provider(input: z.infer<typeof coachRequest>) {
+export async function coachTurn(input: z.infer<typeof coachRequest>) {
   const field = coachFields(input.phase).find((f) => f.key === input.field)!;
   const out = await model("coach_reply", coachOutput, coachInstructions + " " + phaseGuide[input.phase] + " Field text must stay within " + field.max + " characters.", {
     action: input.action,
@@ -49,6 +49,8 @@ async function provider(input: z.infer<typeof coachRequest>) {
     conversation: input.history,
     latestAnswer: input.answer,
   }, 2000);
+  // A finished answer sometimes comes back in reply only; the field text must never be empty when the coach moves on.
+  if (!out.needsMore && !out.suggestion.trim()) return { reply: "칸에 넣었어요.", suggestion: out.reply.slice(0, field.max), needsMore: false };
   return { ...out, suggestion: out.suggestion.slice(0, field.max) };
 }
 
@@ -80,5 +82,5 @@ export async function coach(uid: string, raw: unknown): Promise<CoachReply | Car
     const { cohortId: _, kind: __, ...answers } = input;
     return { ...(await model("problem_card", cardOutput, cardInstructions, answers, 1500)), engine: "ai" };
   }
-  return { ...(await provider(input)), engine: "ai" };
+  return { ...(await coachTurn(input)), engine: "ai" };
 }
