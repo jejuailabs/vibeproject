@@ -1,7 +1,13 @@
 import { getApps, initializeApp } from 'firebase/app';
-import { browserPopupRedirectResolver, browserSessionPersistence, getAuth, initializeAuth, type Auth } from 'firebase/auth';
+import { browserPopupRedirectResolver, getAuth, inMemoryPersistence, initializeAuth, type Auth } from 'firebase/auth';
 export const firebaseConfigured = Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY && process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
 let auth: Auth | null = null;
+function forgetStoredLogins() {
+ try {
+  for (const store of [localStorage, sessionStorage]) for (const key of Object.keys(store)) if (key.startsWith('firebase:authUser:')) store.removeItem(key);
+  indexedDB.deleteDatabase('firebaseLocalStorageDb');
+ } catch {}
+}
 export function clientAuth() {
  if (!firebaseConfigured) throw new Error('Firebase 웹 설정이 필요합니다.');
  if (auth) return auth;
@@ -14,7 +20,9 @@ export function clientAuth() {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
  });
- // Sign-in lasts only for this browser tab session; a stored login from an earlier visit never signs anyone in automatically.
- auth = existing ? getAuth(app) : initializeAuth(app, { persistence: browserSessionPersistence, popupRedirectResolver: browserPopupRedirectResolver });
+ // Sign-in lives only in memory: every visit, refresh or reopened tab starts at the login screen.
+ // Logins stored by earlier versions (localStorage, sessionStorage, IndexedDB) are wiped so they can never sign anyone in.
+ forgetStoredLogins();
+ auth = existing ? getAuth(app) : initializeAuth(app, { persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver });
  return auth;
 }
