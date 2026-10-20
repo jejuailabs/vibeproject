@@ -22,6 +22,13 @@ export function assertEditable(member: Member, idea: Idea, revision: number) {
  if (idea.state !== 'shared') throw new DomainError('LOCKED', '선정되거나 종료된 원본은 수정할 수 없습니다.', 409);
  assertRevision(idea, revision);
 }
+// The person who posted a card can delete it at any step; an admin can too (they often write cards up for others).
+export function assertDeletable(member: Member, idea: Idea, revision: number) {
+ assertCanRead(member, idea);
+ if (member.id !== idea.ownerId && member.role !== 'admin') throw new DomainError('FORBIDDEN', '카드를 올린 사람만 지울 수 있습니다.', 403);
+ if (idea.state === 'selected') throw new DomainError('LOCKED', '프로젝트를 시작한 카드는 지울 수 없습니다.', 409);
+ assertRevision(idea, revision);
+}
 export function assertRevision(idea: Idea, revision: number) {
  if (idea.revision !== revision) throw new DomainError('CONFLICT', '다른 변경이 먼저 저장되었습니다. 최신 내용을 확인해주세요.', 409);
 }

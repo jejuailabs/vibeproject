@@ -11,7 +11,7 @@ const sentenceReady = (r: Refinement) => sentenceFields.every(([k]) => r.definit
  * The finished problem card as it is exhibited and voted on: the one-sentence problem first, then the same
  * problem laid out piece by piece from the writer's answers, so a reader understands it at a glance.
  */
-export function ProblemCard({ value, member, mine, origin, compact, badge }: { value: Refinement; member?: Member; mine?: boolean; origin?: string; compact?: boolean; badge?: ReactNode }) {
+export function ProblemCard({ value, member, mine, origin, compact, badge, author }: { value: Refinement; member?: Member; mine?: boolean; origin?: string; compact?: boolean; badge?: ReactNode; author?: string }) {
   const d = value.definition, a = value.answers;
   const rows: { icon: ReactNode; label: string; text: string; group: "problem" | "why" | "try" }[] = [
     { icon: <UserRound size={14} />, label: "누가 겪나요", text: d.who, group: "problem" },
@@ -29,7 +29,7 @@ export function ProblemCard({ value, member, mine, origin, compact, badge }: { v
       <header>
         <span className="problem-card-kicker"><Lightbulb size={13} /> 문제 카드{value.draft ? ` · 초안 ${value.draft}` : ""}</span>
         {badge}
-        {member && <span className="problem-card-author"><img src={characterFor(member).image} alt="" />{member.name}{mine && <b>나</b>}</span>}
+        {(member || author) && <span className="problem-card-author"><img src={characterFor(member).image} alt="" />{author || member!.name}{mine && <b>나</b>}</span>}
       </header>
       <blockquote>{statement(value)}</blockquote>
       {groups.map(([g, title]) => {

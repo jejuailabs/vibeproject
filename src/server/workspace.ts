@@ -3,7 +3,7 @@ import {refinementInputSchema,nextRefinement,statement} from '@/lib/refinement';
 import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { db } from './firebase';
-import { DomainError, assertAdmin, assertCanRead, assertChannel, assertEditable, assertRevision, canReadIdea, projectIdsOf, validateSelection } from '@/lib/policy';
+import { DomainError, assertAdmin, assertCanRead, assertChannel, assertDeletable, assertEditable, assertRevision, canReadIdea, projectIdsOf, validateSelection } from '@/lib/policy';
 import type { Activity, Command, Comment, HistoryEvent, Idea, Member, Message, Project, Workspace } from '@/lib/types';
 import { z } from 'zod';
 import {characterIds} from '@/lib/characters';
@@ -13,9 +13,10 @@ const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const short = z.string().trim().min(1).max(120);
 const body = z.string().trim().min(1).max(5000);
 const commandSchema = z.discriminatedUnion('type', [
- z.object({ type: z.literal('createIdea'), title: short, body, kind: z.enum(['thought','question','progress']), scope: z.enum(['owner','project','cohort']) }),
+ z.object({ type: z.literal('createIdea'), title: short, body, kind: z.enum(['thought','question','progress']), scope: z.enum(['owner','project','cohort']), authorName: z.string().trim().max(40).optional() }),
  z.object({type:z.literal('refineIdea'),id,revision:z.number().int().nonnegative(),phase:z.enum(['questions','definition']),input:refinementInputSchema,reason:short,scope:z.enum(['owner','project','cohort'])}),
  z.object({ type: z.literal('editIdea'), id, revision: z.number().int().nonnegative(), title: short, body, reason: short }),
+ z.object({ type: z.literal('deleteIdea'), id, revision: z.number().int().nonnegative() }),
  z.object({ type: z.literal('comment'), ideaId: id, body, context:feedbackContextSchema.optional() }),
  z.object({ type: z.literal('sendMessage'), channel: id, body: body.max(2000), step: stepKey.optional() }),
  z.object({ type: z.literal('selectIdea'), ideaId: id, revision: z.number().int().nonnegative(), projectName: short, reason: short }),
@@ -127,7 +128,7 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
     if(activity.data()?.state!=='open'||activity.data()?.closesAt&&activity.data()?.closesAt<=now) throw new DomainError('CLOSED','현재 활동이 마감되었습니다. 나만 보기로 저장할 수 있습니다.',409);
    }
    const ref=c.collection('ideas').doc();
-   const idea:Idea={id:ref.id,title:command.title,body:command.body,kind:command.kind,ownerId:uid,scope:command.scope,projectId:command.scope==='project'?me.projectId:null,state:'shared',revision:1,version:1,createdAt:now,updatedAt:now};
+   const idea:Idea={id:ref.id,title:command.title,body:command.body,kind:command.kind,ownerId:uid,scope:command.scope,projectId:command.scope==='project'?me.projectId:null,state:'shared',revision:1,version:1,createdAt:now,updatedAt:now,...(command.authorName?{authorName:command.authorName}:{})};
    tx.create(ref,idea); history(idea,command.scope==='owner'?'첫 생각 저장':'첫 생각 공유','최초 작성'); result={id:ref.id};
   } else if(command.type==='sendMessage') {
    assertChannel(me,command.channel);
@@ -146,11 +147,19 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
    if(linked&&linkedSnap?.exists)tx.update(linked,{'data.state':command.state,revision:(linkedSnap.data()?.revision||0)+1,updatedAt:now});
    tx.update(ref,{state:command.state,updatedAt:now,updatedBy:uid});
   } else {
-   const ideaId=(command.type==='editIdea'||command.type==='refineIdea')?command.id:command.ideaId;
+   const ideaId=(command.type==='editIdea'||command.type==='refineIdea'||command.type==='deleteIdea')?command.id:command.ideaId;
    const ref=c.collection('ideas').doc(ideaId), snap=await tx.get(ref);
    if(!snap.exists) throw new DomainError('NOT_FOUND','아이디어를 찾을 수 없습니다.',404);
    const idea={...snap.data(),id:ideaId} as Idea; assertCanRead(me,idea);
-   if(command.type==='comment') {
+   if(command.type==='deleteIdea') {
+    assertDeletable(me,idea,command.revision);
+    // The team's confirmed problem is what planning builds on, so it stays until the leader confirms another card.
+    if(idea.projectId){
+     const team=await tx.get(c.collection('projects').doc(idea.projectId));
+     if(team.data()?.confirmedProblem?.ideaId===idea.id)throw new DomainError('LOCKED','팀이 확정한 문제 카드는 지울 수 없어요. 리더가 다른 카드를 확정한 뒤 지워주세요.',409);
+    }
+    tx.delete(ref);result={id:ideaId};
+   } else if(command.type==='comment') {
     if(idea.state==='closed_unselected') throw new DomainError('LOCKED','종료된 아이디어는 읽기 전용입니다.',409);
     if(command.context){
      const versions=await tx.get(ref.collection('history').where('revision','==',command.context.revision).limit(1));

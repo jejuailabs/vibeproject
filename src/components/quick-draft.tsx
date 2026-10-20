@@ -33,8 +33,8 @@ const readAs = (file: File, how: "text" | "url") => new Promise<string>((ok, no)
  * One rough text and/or files in, steps 1–3 and the problem card out. Missing parts come back as easy
  * questions; answering them redrafts. Nothing is saved until the writer presses the save button.
  */
-export function QuickDraft({ ask, member, initial, doneLabel, onDone, onCancel }: { ask: DraftAsk; member?: Member; initial?: Partial<DraftFields>; doneLabel: string; onDone: (fields: DraftFields) => Promise<unknown> | void; onCancel?: () => void }) {
-  const [text, setText] = useState(""), [files, setFiles] = useState<(DraftFile & { size: number })[]>([]);
+export function QuickDraft({ ask, member, initial, doneLabel, onDone, onCancel, authors }: { ask: DraftAsk; member?: Member; initial?: Partial<DraftFields>; doneLabel: string; onDone: (fields: DraftFields, author: string) => Promise<unknown> | void; onCancel?: () => void; authors?: string[] }) {
+  const [author, setAuthor] = useState(""), [text, setText] = useState(""), [files, setFiles] = useState<(DraftFile & { size: number })[]>([]);
   const [fields, setFields] = useState<DraftFields | null>(null), [missing, setMissing] = useState<{ field: DraftKey; question: string }[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({}), [busy, setBusy] = useState(false), [error, setError] = useState(""), [engine, setEngine] = useState<"ai" | "basic" | null>(null);
 
@@ -70,10 +70,18 @@ export function QuickDraft({ ask, member, initial, doneLabel, onDone, onCancel }
 
   const card = fields ? draftRefinement(fields) : null;
   const sentence = !!card && sentenceFields.every(([k]) => card.definition[k].trim());
+  // Optional for a new card: whose experience this is when someone else (usually an admin) writes it up.
+  const authorField = authors && (
+    <label className="quick-author">작성자 <small>다른 사람의 이야기를 정리할 때만 적어요. 비우면 내 이름으로 올라가요.</small>
+      <input value={author} onChange={(e) => setAuthor(e.target.value)} maxLength={40} list="quick-authors" placeholder="예: 김지수" disabled={busy} />
+      <datalist id="quick-authors">{authors.map((n) => <option key={n} value={n} />)}</datalist>
+    </label>
+  );
   return (
     <section className="quick-draft" aria-label="긴 글로 한 번에 만들기">
       {!fields ? (
         <>
+          {authorField}
           <p className="quick-intro"><Sparkles size={15} /> 겪은 일을 길게, 생각나는 대로 적거나 메모·녹취록·사진·PDF를 넣어주세요. AI가 1·2·3단계를 채우고 문제 카드까지 만들어요. 빠진 부분만 다시 물어봐요.</p>
           <textarea className="quick-text" value={text} onChange={(e) => setText(e.target.value)} rows={9} maxLength={20000} disabled={busy} placeholder={"예: 초등학교 3학년 딸에게 매일 저녁 학습지를 시키려고 하면 꼭 싸우게 돼요. 저도 퇴근하고 피곤해서 까먹는 날이 많고…"} />
           <div className="quick-files">
@@ -98,7 +106,8 @@ export function QuickDraft({ ask, member, initial, doneLabel, onDone, onCancel }
               <button type="button" className="primary-button" disabled={busy || !missing.some((m) => answers[m.field]?.trim())} onClick={() => run(true)}>{busy ? <><LoaderCircle className="spin" size={15} /> 다시 정리하는 중…</> : <><Sparkles size={15} /> 답하고 다시 정리하기</>}</button>
             </div>
           )}
-          {sentence ? <ProblemCard value={card!} member={member} mine origin={fields.title} /> : <p className="quick-note">문제 카드 문장을 만들 내용이 아직 부족해요. 위 질문에 답해주세요.</p>}
+          {authorField}
+          {sentence ? <ProblemCard value={card!} member={member} mine={!author.trim()} author={author.trim() || undefined} origin={fields.title} /> : <p className="quick-note">문제 카드 문장을 만들 내용이 아직 부족해요. 위 질문에 답해주세요.</p>}
           <details className="quick-fields">
             <summary>AI가 채운 1·2·3단계 내용 보기·고치기</summary>
             {(Object.keys(labels) as DraftKey[]).map((k) => (
@@ -107,7 +116,7 @@ export function QuickDraft({ ask, member, initial, doneLabel, onDone, onCancel }
           </details>
           <div className="quick-actions">
             <button type="button" className="secondary-button" disabled={busy} onClick={() => { setFields(null); setMissing([]); }}><RotateCcw size={14} /> 처음부터 다시</button>
-            <button type="button" className="primary-button" disabled={busy || !fields.title.trim() || !fields.body.trim()} onClick={async () => { setBusy(true); try { await onDone(fields); } finally { setBusy(false); } }}>{doneLabel}{card?.ready ? "" : " (덜 채워진 채로)"}</button>
+            <button type="button" className="primary-button" disabled={busy || !fields.title.trim() || !fields.body.trim()} onClick={async () => { setBusy(true); try { await onDone(fields, author.trim()); } finally { setBusy(false); } }}>{doneLabel}{card?.ready ? "" : " (덜 채워진 채로)"}</button>
           </div>
         </>
       )}

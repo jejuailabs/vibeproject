@@ -2,7 +2,7 @@ import {validateFeedbackContext,feedbackContextSchema} from './exhibition';
 import {nextRefinement,statement,emptyRefinement} from './refinement';
 import type {Workspace,Command,Idea,HistoryEvent} from './types';
 import {isCharacterId} from './characters';
-import {assertAdmin,assertEditable,assertCanRead,assertChannel,validateSelection,projectIdsOf} from './policy';
+import {assertAdmin,assertDeletable,assertEditable,assertCanRead,assertChannel,validateSelection,projectIdsOf} from './policy';
 const date='2026-10-12T01:00:00.000Z';
 export function previewWorkspace():Workspace {
  const members=[
@@ -40,14 +40,16 @@ export function previewCommand(state:Workspace,command:Command):Workspace {
  }else if(command.type==='createIdea'){
   if(command.scope==='cohort' && next.activity.state==='closed')throw new Error('현재 활동이 마감되었습니다.');
   if(command.scope==='project'&&!next.me.projectId)throw new Error('프로젝트에 먼저 참여해주세요.');
-  const idea:Idea={id:uuid(),...command,ownerId:uid,projectId:command.scope==='project'?next.me.projectId:null,state:'shared',revision:1,version:1,createdAt:now,updatedAt:now};
+  const {authorName,...fields}=command;
+  const idea:Idea={id:uuid(),...fields,...(authorName?.trim()?{authorName:authorName.trim().slice(0,40)}:{}),ownerId:uid,projectId:command.scope==='project'?next.me.projectId:null,state:'shared',revision:1,version:1,createdAt:now,updatedAt:now};
   next.ideas.unshift(idea);record(idea,'첫 생각 공유','최초 작성');
  }else if(command.type==='sendMessage'){assertChannel(next.me,command.channel);next.messages.push({id:uuid(),authorId:uid,body:command.body,channel:command.channel,createdAt:now,...(command.step&&command.channel!=='cohort'?{step:command.step}:{})});
  }else if(command.type==='setActivity'){assertAdmin(next.me);next.activity.state=command.state;
  }else{
-  const idea=next.ideas.find(i=>i.id===((command.type==='editIdea'||command.type==='refineIdea')?command.id:command.ideaId));if(!idea)throw new Error('아이디어가 없습니다.');
+  const idea=next.ideas.find(i=>i.id===((command.type==='editIdea'||command.type==='refineIdea'||command.type==='deleteIdea')?command.id:command.ideaId));if(!idea)throw new Error('아이디어가 없습니다.');
   assertCanRead(next.me,idea);
-  if(command.type==='comment'){if(idea.state==='closed_unselected')throw new Error('종료된 아이디어입니다.');if(command.context){const context=feedbackContextSchema.parse(command.context);validateFeedbackContext(context,next.events.find(e=>e.ideaId===idea.id&&e.revision===context.revision)?.snapshot||(context.revision===idea.revision?idea:undefined));}next.comments.push({id:uuid(),ideaId:idea.id,authorId:uid,body:command.body,createdAt:now,...(command.context?{context:command.context}:{})});}
+  if(command.type==='deleteIdea'){assertDeletable(next.me,idea,command.revision);next.ideas=next.ideas.filter(i=>i.id!==idea.id);}
+  else if(command.type==='comment'){if(idea.state==='closed_unselected')throw new Error('종료된 아이디어입니다.');if(command.context){const context=feedbackContextSchema.parse(command.context);validateFeedbackContext(context,next.events.find(e=>e.ideaId===idea.id&&e.revision===context.revision)?.snapshot||(context.revision===idea.revision?idea:undefined));}next.comments.push({id:uuid(),ideaId:idea.id,authorId:uid,body:command.body,createdAt:now,...(command.context?{context:command.context}:{})});}
   else if(command.type==='refineIdea'){
    assertEditable(next.me,idea,command.revision);
    if(command.scope==='project'&&!next.me.projectId)throw new Error('프로젝트에 먼저 참여해주세요.');

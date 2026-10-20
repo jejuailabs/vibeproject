@@ -12,6 +12,8 @@ export type Idea = {
  id: string; title: string; body: string; kind: 'thought' | 'question' | 'progress';
  ownerId: string; scope: Scope; projectId: string | null; state: IdeaState;
  revision: number; version: number; createdAt: string; updatedAt: string; sourceId?: string; sourceMessageId?: string; sourceChannel?: string; sourceSubmissionId?: string;
+ /** Who the card is from when someone else (usually an admin) wrote it up for them; the owner stays the writer. */
+ authorName?: string;
 };
 export type FeedbackContext = {stage:'thought'|'questions'|'definition'|'ready'; revision:number};
 export type Comment = {context?:FeedbackContext; id: string; ideaId: string; authorId: string; body: string; createdAt: string };
@@ -26,9 +28,10 @@ export type Workspace = {
  comments: Comment[]; projects: Project[]; activity: Activity; messages: Message[]; events: HistoryEvent[];
 };
 export type Command =
- | { type: 'createIdea'; title: string; body: string; kind: Idea['kind']; scope: Scope }
+ | { type: 'createIdea'; title: string; body: string; kind: Idea['kind']; scope: Scope; authorName?: string }
  | { type: 'refineIdea'; id: string; revision: number; phase: 'questions'|'definition'; input: RefinementInput; reason: string; scope: Scope }
  | { type: 'editIdea'; id: string; revision: number; title: string; body: string; reason: string }
+ | { type: 'deleteIdea'; id: string; revision: number }
  | { type: 'comment'; ideaId: string; body: string; context?: FeedbackContext }
  | { type: 'sendMessage'; channel: string; body: string; step?: StepKey }
  | { type: 'selectIdea'; ideaId: string; revision: number; projectName: string; reason: string }

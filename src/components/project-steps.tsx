@@ -107,10 +107,10 @@ export function ProjectSteps(p: StepsProps) {
   );
 
   // One-shot draft: a new card goes through all three saves (thought, experience, problem card) in order.
-  async function saveDraft(f: DraftFields) {
+  async function saveDraft(f: DraftFields, author: string) {
     const r = draftRefinement(f);
     let id = "";
-    if (!(await p.saveIdea({ type: "createIdea", title: f.title.trim().slice(0, 120), body: f.body.trim().slice(0, 5000), kind: "thought", scope: "project" }, (res) => { id = res.id || ""; })) || !id) return;
+    if (!(await p.saveIdea({ type: "createIdea", title: f.title.trim().slice(0, 120), body: f.body.trim().slice(0, 5000), kind: "thought", scope: "project", ...(author ? { authorName: author } : {}) }, (res) => { id = res.id || ""; })) || !id) return;
     const input = { answers: r.answers, definition: r.definition, ready: false };
     const reason = "AI로 한 번에 정리";
     if (questionFields.some(([k]) => r.answers[k].trim()) && !(await p.saveIdea({ type: "refineIdea", id, revision: 1, phase: "questions", input, reason, scope: "project" }))) return;
@@ -214,9 +214,9 @@ export function ProjectSteps(p: StepsProps) {
             const owner = w.members.find((m) => m.id === i.ownerId), done = cardDone(step, i);
             return (
               <article key={i.id} className={"pad-card" + (done ? "" : " waiting") + (i.ownerId === me.id ? " mine" : "")} style={{ background: done ? tones[n % tones.length] : undefined }} role="button" tabIndex={0}
-                aria-label={(owner?.name || "팀원") + "의 카드 전체 보기 · " + i.title}
+                aria-label={(i.authorName || owner?.name || "팀원") + "의 카드 전체 보기 · " + i.title}
                 onClick={() => openCard(i)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openCard(i); } }}>
-                <Owner member={owner} mine={i.ownerId === me.id} />
+                <Owner member={owner} mine={i.ownerId === me.id} author={i.authorName} />
                 <CardProgress idea={i} step={step} />
                 {canContinue(i) && step !== "thought" && <span className="pad-continue">{cardDone(step, i) ? "눌러서 고치기 · AI 코치" : "눌러서 이어 쓰기 · AI 코치"}</span>}
                 {step === "thought" && <><h4>{i.title}</h4><p>{i.body}</p></>}
@@ -224,7 +224,10 @@ export function ProjectSteps(p: StepsProps) {
                   <dl>{questionFields.map(([k, label]) => i.refinement?.answers[k]?.trim() ? <div key={k}><dt>{label}</dt><dd>{i.refinement.answers[k]}</dd></div> : null)}</dl>
                 ) : <p className="steps-muted">아직 질문에 답하지 않았어요.</p>}</>}
                 {step === "definition" && (done ? <ProblemCard value={i.refinement!} origin={i.title} compact /> : <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p><p className="steps-muted">{answered(i.refinement) === questionFields.length ? "문제 카드를 만드는 중이에요." : "2단계 경험 질문부터 답해야 해요."}</p></>)}
-                <footer><em><MessageCircle size={12} /> 의견 {commentCount(i.id)}</em></footer>
+                <footer>
+                  {(i.ownerId === me.id || me.role === "admin") && !ended && <button type="button" className="text-button pad-manage" onClick={(e) => { e.stopPropagation(); p.onIdea(i.id); }}>고치기·삭제</button>}
+                  <em><MessageCircle size={12} /> 의견 {commentCount(i.id)}</em>
+                </footer>
               </article>
             );
           })}
@@ -237,7 +240,7 @@ export function ProjectSteps(p: StepsProps) {
           <ul>
             {cards.filter((i) => !reached(step, i)).map((i) => {
               const owner = w.members.find((m) => m.id === i.ownerId);
-              return <li key={i.id}><button onClick={() => (canContinue(i) ? continueAt("questions", i) : p.onIdea(i.id))}><Avatar member={owner} /><span><strong>{i.title}</strong><small>{owner?.name}{i.ownerId === me.id ? " · 나" : ""} · 2단계 경험 질문 {answered(i.refinement)}/{questionFields.length}</small></span><em>{i.ownerId === me.id ? "2단계부터 하기" : "앞 단계 진행 중"}</em></button></li>;
+              return <li key={i.id}><button onClick={() => (canContinue(i) ? continueAt("questions", i) : p.onIdea(i.id))}><Avatar member={owner} /><span><strong>{i.title}</strong><small>{i.authorName ? i.authorName + " · 정리 " + (owner?.name || "팀원") : owner?.name}{i.ownerId === me.id ? " · 나" : ""} · 2단계 경험 질문 {answered(i.refinement)}/{questionFields.length}</small></span><em>{i.ownerId === me.id ? "2단계부터 하기" : "앞 단계 진행 중"}</em></button></li>;
             })}
             {members.filter((m) => !cards.some((i) => i.ownerId === m.id)).map((m) => (
               <li key={m.id}><div><Avatar member={m} /><span><strong>{m.name}</strong><small>1단계 생각 카드를 아직 올리지 않았어요</small></span></div></li>
@@ -280,7 +283,7 @@ export function ProjectSteps(p: StepsProps) {
                 const count = vote?.data.counts[i.id] || 0;
                 return (
                   <article key={i.id} className={"pad-card" + (pick === i.id ? " picked" : "") + (chosen ? " chosen" : "") + (i.ownerId === me.id ? " mine" : "")} style={{ background: tones[n % tones.length] }}>
-                    <Owner member={owner} mine={i.ownerId === me.id} />
+                    <Owner member={owner} mine={i.ownerId === me.id} author={i.authorName} />
                     {chosen && <span className="pad-badge"><Crown size={12} /> 확정</span>}
                     <ProblemCard value={i.refinement!} origin={i.title} compact badge={vote?.data.state === "closed" ? <span className="pad-count">{count}표</span> : undefined} />
                     <div className="pad-actions">
@@ -372,7 +375,7 @@ export function ProjectSteps(p: StepsProps) {
               <button className="icon-button" aria-label="닫기" onClick={() => setWriting(false)}><X size={20} /></button>
             </header>
             {quick && p.makeDraft ? (
-              <QuickDraft ask={p.makeDraft} member={me} doneLabel="새 카드로 저장하기" onDone={saveDraft} onCancel={() => setWriting(false)} />
+              <QuickDraft ask={p.makeDraft} member={me} doneLabel="새 카드로 저장하기" onDone={saveDraft} onCancel={() => setWriting(false)} authors={members.map((m) => m.name)} />
             ) : step === "thought" ? (
               <div className={p.askCoach ? "write-grid" : ""}>
                 <form className="steps-form" onSubmit={createCard}>
@@ -404,12 +407,13 @@ export function ProjectSteps(p: StepsProps) {
 }
 
 /** Who wrote the card, at the top where it is seen first; my own cards say so plainly. */
-function Owner({ member, mine }: { member?: Member; mine: boolean }) {
+function Owner({ member, mine, author }: { member?: Member; mine: boolean; author?: string }) {
   return (
     <div className="pad-owner">
       <img className="pad-owner-avatar" src={characterFor(member).image} alt="" />
-      <strong>{member?.name || "팀원"}</strong>
-      {mine && <span className="pad-me">나</span>}
+      <strong>{author || member?.name || "팀원"}</strong>
+      {author && <small className="pad-by">정리 · {member?.name || "팀원"}</small>}
+      {mine && <span className="pad-me">{author ? "내가 정리" : "나"}</span>}
     </div>
   );
 }
