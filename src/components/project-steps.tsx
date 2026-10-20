@@ -12,7 +12,7 @@ import { projectTimeline, type StepKey } from "@/lib/steps";
 import { ProjectTimeline } from "./project-timeline";
 import { ProjectExhibit } from "./project-exhibit";
 import { AICoach } from "./ai-coach";
-import { CardPreview } from "./card-view";
+import { CardPreview, ProblemCard } from "./card-view";
 
 const steps: { key: StepKey; name: string; title: string; hint: string; group: "find" | "make" }[] = [
   { key: "thought", name: "각자 생각", title: "어떤 순간이 불편했나요?", hint: "직접 겪은 일 하나를 짧게 올려요.", group: "find" },
@@ -203,7 +203,7 @@ export function ProjectSteps(p: StepsProps) {
                 {step === "questions" && <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p>{answered(i.refinement) ? (
                   <dl>{questionFields.map(([k, label]) => i.refinement?.answers[k]?.trim() ? <div key={k}><dt>{label}</dt><dd>{i.refinement.answers[k]}</dd></div> : null)}</dl>
                 ) : <p className="steps-muted">아직 질문에 답하지 않았어요.</p>}</>}
-                {step === "definition" && (done ? <><blockquote>{statement(i.refinement!)}</blockquote><p className="pad-origin">출발 · {i.title}</p></> : <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p><p className="steps-muted">{answered(i.refinement) === questionFields.length ? "문제 카드를 만드는 중이에요." : "2단계 경험 질문부터 답해야 해요."}</p></>)}
+                {step === "definition" && (done ? <ProblemCard value={i.refinement!} origin={i.title} compact /> : <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p><p className="steps-muted">{answered(i.refinement) === questionFields.length ? "문제 카드를 만드는 중이에요." : "2단계 경험 질문부터 답해야 해요."}</p></>)}
                 <footer><em><MessageCircle size={12} /> 의견 {commentCount(i.id)}</em></footer>
               </article>
             );
@@ -259,8 +259,7 @@ export function ProjectSteps(p: StepsProps) {
                   <article key={i.id} className={"pad-card" + (pick === i.id ? " picked" : "") + (chosen ? " chosen" : "") + (i.ownerId === me.id ? " mine" : "")} style={{ background: tones[n % tones.length] }}>
                     <Owner member={owner} mine={i.ownerId === me.id} />
                     {chosen && <span className="pad-badge"><Crown size={12} /> 확정</span>}
-                    <blockquote>{statement(i.refinement!)}</blockquote>
-                    {vote?.data.state === "closed" && <span className="pad-count">{count}표</span>}
+                    <ProblemCard value={i.refinement!} origin={i.title} compact badge={vote?.data.state === "closed" ? <span className="pad-count">{count}표</span> : undefined} />
                     <div className="pad-actions">
                       <button type="button" className="text-button" onClick={() => p.onIdea(i.id)}>전체 보기</button>
                       {open && !ended && <button type="button" className={mineVote ? "primary-button" : "secondary-button"} disabled={p.busy} onClick={() => castVote(i.id)}>{mineVote ? <><Check size={14} /> 내 선택</> : "이 문제에 투표"}</button>}

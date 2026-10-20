@@ -4,7 +4,7 @@ import {LoaderCircle,Sparkles} from 'lucide-react';
 import type {Idea,Command,Scope,Member} from '@/lib/types';
 import type {CardAsk,CoachAsk} from '@/lib/coaching';
 import {AICoach} from './ai-coach';
-import {CardPreview,RefinementView} from './card-view';
+import {CardPreview,ProblemCard,RefinementView} from './card-view';
 import {questionFields,definitionFields,sentenceFields,emptyRefinement,answered,refinementLabel,statement,solutionHints,type Refinement} from '@/lib/refinement';
 export function RefinementSummary({value}:{value?:Refinement}){
  if(!value)return null;
@@ -68,7 +68,7 @@ export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePa
    {fields.map(([key,label,hint],n)=><label key={key}><span className="refinement-q">{n+1}</span>{label}<textarea aria-label={label} rows={2} maxLength={700} value={panel==='questions'?value.answers[key as keyof Refinement['answers']]:value.definition[key as keyof Refinement['definition']] as string} placeholder={hint} onChange={e=>panel==='questions'?setAnswer(key,e.target.value):setDef(key,e.target.value)}/></label>)}
    {panel==='definition'&&<div className="problem-card-maker">
     <div className="problem-card-head"><strong>문제 카드</strong><button type="button" className="secondary-button" disabled={!makeCard||!asked||!complete||making} onClick={draftCard}>{making?<LoaderCircle className="spin" size={14}/>:<Sparkles size={14}/>} {sentence?'AI로 다시 만들기':'AI로 문제 카드 만들기'}</button></div>
-    {sentence?<blockquote aria-label="문제 한 문장">{statement(value)}</blockquote>:<p className="problem-card-empty">{!asked?'위 세 질문에 먼저 답해주세요.':sentenceFields.some(([k])=>value.definition[k].trim())?'아래 빈칸을 채우면 문제 한 문장이 완성돼요.':'버튼을 누르면 AI가 문제 한 문장을 만들어줘요.'}</p>}
+    {sentence?<ProblemCard value={value} member={owner} mine origin={idea.title}/>:<p className="problem-card-empty">{!asked?'위 세 질문에 먼저 답해주세요.':sentenceFields.some(([k])=>value.definition[k].trim())?'아래 빈칸을 채우면 문제 한 문장이 완성돼요.':'버튼을 누르면 AI가 문제 한 문장을 만들어줘요.'}</p>}
     {cardNote&&<p className="problem-card-note" role="status">{cardNote}</p>}
     {(sentence||sentenceFields.some(([k])=>value.definition[k].trim()))&&<details className="problem-card-edit" open={!sentence}><summary>문장 직접 고치기</summary><div>{sentenceFields.map(([key,label,hint])=><label key={key}>{label}<input aria-label={label} maxLength={300} value={value.definition[key]} placeholder={hint} onChange={e=>setDef(key,e.target.value)}/></label>)}</div></details>}
     {hint&&sentence&&<p className="refinement-hint" role="status">문장에 앱·기능 이름이 들어 있어요. 해결 방법은 나중에 정하고, 사람이 겪는 어려움으로 적어주세요.</p>}

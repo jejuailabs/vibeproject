@@ -63,7 +63,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  const simple=data?.me.role==='participant';
  // Every menu stays in the app; participants just don't see the hidden ones. Add an id here to show it again.
  const participantMenu:string[]=['dashboard'];
- useEffect(()=>{if(simple)setSpace('project');},[simple,data?.me.id]);
+ useEffect(()=>{if(simple){setSpace('project');setView(v=>v==='ideas'||v==='history'?'dashboard':v);}},[simple,data?.me.id]);
  function clearInvite(){setInvite(null);const url=new URL(location.href);url.searchParams.delete('project');url.searchParams.delete('invite');history.replaceState(null,'',url);}
  const load=useCallback(async(current:User)=>{
   const response=await fetch('/api/workspace?cohortId='+encodeURIComponent(cohortId),{headers:{Authorization:'Bearer '+await current.getIdToken()},cache:'no-store'});

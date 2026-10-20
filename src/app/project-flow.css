@@ -154,3 +154,37 @@
 /* The detail window already shows the card above, so drop the repeat and the intro to bring the coach up. */
 .detail-modal.wide .carry,.detail-modal.wide .refinement-editor>header{display:none}
 .detail-modal.wide .refinement-editor{margin-top:12px}
+
+/* Problem card: the exhibited, voted-on card. One sentence on top, then the problem laid out piece by piece. */
+.problem-card{position:relative;display:grid;gap:14px;background:#fff;border-radius:18px;padding:18px 18px 16px;color:#2c2937;box-shadow:0 10px 30px #2c193f24;overflow:hidden;border:1px solid #efe6f8}
+.problem-card::before{content:"";position:absolute;inset:0 0 auto 0;height:6px;background:linear-gradient(90deg,#7854b8,#c45ad6,#ff8f6b)}
+.problem-card header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.problem-card-kicker{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:800;letter-spacing:.3px;color:#7854b8;background:#f3ecfc;border-radius:999px;padding:4px 10px}
+.problem-card-author{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;color:#4c3f5c}
+.problem-card-author img{width:26px;height:26px;border-radius:50%;object-fit:cover;object-position:top;background:#efe7fb}
+.problem-card-author b{font-size:11px;color:#fff;background:#ff6b3d;border-radius:999px;padding:2px 8px}
+.problem-card>blockquote{margin:0;position:relative;padding:14px 16px 14px 44px;border-radius:14px;background:linear-gradient(135deg,#fff7ea,#fdf0ff);font-size:16.5px;font-weight:800;line-height:1.6;letter-spacing:-.3px;color:#2c2937;border:0}
+.problem-card>blockquote::before{content:"\201C";position:absolute;left:12px;top:2px;font-size:44px;line-height:1;color:#ff9b6b;font-family:Georgia,serif}
+.problem-card-group{display:grid;gap:8px}
+.problem-card-group h5{margin:0;font-size:11px;font-weight:800;letter-spacing:.5px;color:#9a8ea8;text-transform:none}
+.problem-card-group dl{margin:0;display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.problem-card-group dl>div{border-radius:12px;padding:10px 12px;background:#faf7fd;border:1px solid #efe6f8;min-width:0}
+.problem-card-group dt{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:#7854b8;margin-bottom:4px}
+.problem-card-group dt svg{flex-shrink:0;width:22px;height:22px;padding:4px;border-radius:50%;background:#ede3fa;color:#7854b8}
+.problem-card-group dd{margin:0;font-size:13px;line-height:1.6;color:#3e3249;overflow-wrap:anywhere;white-space:pre-wrap}
+.problem-card-group.why dl>div{background:#fff8f3;border-color:#fde3d3}
+.problem-card-group.why dt,.problem-card-group.why dt svg{color:#d0602f}
+.problem-card-group.why dt svg{background:#ffe7da}
+.problem-card-group.try dl>div{background:#f0faf4;border-color:#cfeedd}
+.problem-card-group.try dt,.problem-card-group.try dt svg{color:#2f7a52}
+.problem-card-group.try dt svg{background:#d9f2e4}
+.problem-card>footer{font-size:12px;color:#8e869a;border-top:1px dashed #e7ddf0;padding-top:10px}
+.problem-card.compact{padding:14px 14px 12px;gap:10px;box-shadow:0 4px 14px #2c193f1a}
+.problem-card.compact>blockquote{font-size:14.5px;padding:11px 12px 11px 36px}
+.problem-card.compact>blockquote::before{font-size:34px;left:9px}
+.problem-card.compact .problem-card-group dl{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:5px}
+.problem-card.compact .problem-card-group dl>div{padding:7px 9px}
+.problem-card.compact .problem-card-group dd{font-size:12.5px}
+.pad-card .problem-card{margin:0 -4px}
+.problem-card-maker>.problem-card{margin-top:2px}
+.problem-card .pad-count{font-size:15px;font-weight:900;color:#fff;background:#7854b8;border-radius:999px;padding:3px 11px}
