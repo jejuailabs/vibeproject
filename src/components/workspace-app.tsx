@@ -26,6 +26,7 @@ type View='dashboard'|'ideas'|'projects'|'history'|'workshop'|'gallery';
 type Space='me'|'cohort'|'project';
 const cohortId=process.env.NEXT_PUBLIC_COHORT_ID||'vibe-2026-01';
 const kindLabel={thought:'생각 나누기',question:'함께 고민해요',progress:'진행 공유'};
+const menu=[['dashboard',LayoutDashboard,'대시보드'],['ideas',Lightbulb,'아이디어 보드'],['projects',Users,'프로젝트'],['history',Clock3,'성장 이력'],['gallery',Images,'전시 갤러리'],['workshop',Sparkles,'워크숍 진행']] as const;
 const stateLabel={candidate:'투표 후보 · 내용 고정',shared:'함께 다듬는 중',selected:'프로젝트로 연결',closed_unselected:'종료 보관'};
 function time(value:string){return new Intl.DateTimeFormat('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Seoul'}).format(new Date(value));}
 function Avatar({member,large=false}:{member?:Member;large?:boolean}){
@@ -59,6 +60,8 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  useEffect(()=>{if(!data||lobbyDefault.current)return;lobbyDefault.current=true;if(data.me.role==='participant'){setSpace('project');setChatOpen(false);}if(!preview&&!projectIdsOf(data.me).length)setView('projects');},[data,preview]);
  // Participants get a simple shell: their projects, the lobby, the gallery and chat.
  const simple=data?.me.role==='participant';
+ // Every menu stays in the app; participants just don't see the hidden ones. Add an id here to show it again.
+ const participantMenu:string[]=['dashboard'];
  useEffect(()=>{if(simple)setSpace('project');},[simple,data?.me.id]);
  function clearInvite(){setInvite(null);const url=new URL(location.href);url.searchParams.delete('project');url.searchParams.delete('invite');history.replaceState(null,'',url);}
  const load=useCallback(async(current:User)=>{
@@ -149,10 +152,10 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  <Brand/><div className="cohort-select"><div className="cohort-logo">V<span>1</span></div><div><strong>{data.cohort.name}</strong><small>4주간의 새로운 시작</small></div><ChevronDown size={15}/></div>
  <span className="nav-label">WORKSPACE</span>
  <nav>
- {(simple?([['dashboard',LayoutDashboard,'내 프로젝트'],['projects',Users,'프로젝트 찾기'],['gallery',Images,'전시 갤러리']] as const):([['dashboard',LayoutDashboard,'대시보드'],['ideas',Lightbulb,'아이디어 보드'],['projects',Users,'프로젝트'],['history',Clock3,'성장 이력'],['gallery',Images,'전시 갤러리'],['workshop',Sparkles,'워크숍 진행']] as const)).map(([id,Icon,label])=><button key={id} className={view===id?'nav-item active':'nav-item'} aria-label={label} title={label} onClick={()=>{if(id==='dashboard'&&simple){setSpace('project');setEntered(false);}navigate(id);}}><Icon size={19}/><span className='nav-text'>{label}</span>{id==='ideas'&&<span className="nav-count">{data.ideas.length}</span>}</button>)}
+ {menu.filter(([id])=>!simple||participantMenu.includes(id)||(id==='projects'&&!projectIdsOf(me).length)).map(([id,Icon,label])=><button key={id} className={view===id?'nav-item active':'nav-item'} aria-label={label} title={label} onClick={()=>{if(id==='dashboard'&&simple){setSpace('project');setEntered(false);}navigate(id);}}><Icon size={19}/><span className='nav-text'>{label}</span>{id==='ideas'&&<span className="nav-count">{data.ideas.length}</span>}</button>)}
  <button className="nav-item" aria-label="대화 공간" title="대화 공간" onClick={()=>setChatOpen(v=>!v)}><MessageCircle size={19}/><span className="nav-text">대화 공간</span><span className="chat-dot"/></button>
  </nav>
- <div className="sidebar-journey"><span>OUR JOURNEY</span><p>작은 생각이<br/>세상을 바꾸는 여정.</p><div className="journey-dots">{[1,2,3,4].map(w=><i key={w} className={w<=data.cohort.week?'done':''}/>)}</div><small>WEEK {data.cohort.week} OF 4</small></div>
+ {!simple&&<div className="sidebar-journey"><span>OUR JOURNEY</span><p>작은 생각이<br/>세상을 바꾸는 여정.</p><div className="journey-dots">{[1,2,3,4].map(w=><i key={w} className={w<=data.cohort.week?'done':''}/>)}</div><small>WEEK {data.cohort.week} OF 4</small></div>}
  <div className="sidebar-bottom"><button className="avatar-edit" aria-label="내 캐릭터 변경" onClick={()=>{setError('');setCharacterOpen(true);}}><Avatar member={me}/></button><div><strong>{me.name}</strong><small>{me.role==='admin'?'기수 관리자':'메이커'}</small></div><button className="icon-button" aria-label="로그아웃" onClick={()=>preview?location.assign('/'):signOut(clientAuth())}><LogOut size={17}/></button></div>
  </aside>
  <div className="main-shell">
