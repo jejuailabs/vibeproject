@@ -39,6 +39,10 @@ type StepsProps = Props & {
 function Avatar({ member }: { member?: Member }) {
   return <img className="steps-avatar" src={characterFor(member).image} alt="" />;
 }
+// A card shows on a step's board only once the step before it is finished; otherwise it waits below the board.
+function reached(step: StepKey, i: Idea) {
+  return step === "definition" ? answered(i.refinement) === questionFields.length : true;
+}
 function cardDone(step: StepKey, i: Idea) {
   return step === "thought" ? true : step === "questions" ? answered(i.refinement) === questionFields.length : !!i.refinement?.ready;
 }
@@ -182,25 +186,38 @@ export function ProjectSteps(p: StepsProps) {
           {!ended && (
             <button className="pad-add" onClick={() => setWriting(true)}><Plus size={22} /><strong>{writeLabel}</strong><small>{progress[step].label}</small></button>
           )}
-          {cards.map((i, n) => {
+          {cards.filter((i) => reached(step, i)).map((i, n) => {
             const owner = w.members.find((m) => m.id === i.ownerId), done = cardDone(step, i);
             return (
               <article key={i.id} className={"pad-card" + (done ? "" : " waiting")} style={{ background: done ? tones[n % tones.length] : undefined }} role="button" tabIndex={0}
                 aria-label={(owner?.name || "팀원") + "의 카드 전체 보기 · " + i.title}
                 onClick={() => p.onIdea(i.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); p.onIdea(i.id); } }}>
+                <CardProgress idea={i} step={step} />
                 {step === "thought" && <><h4>{i.title}</h4><p>{i.body}</p></>}
-                {step === "questions" && (answered(i.refinement) ? (
-                  <><h4>{i.title}</h4><dl>{questionFields.map(([k, label]) => i.refinement?.answers[k]?.trim() ? <div key={k}><dt>{label}</dt><dd>{i.refinement.answers[k]}</dd></div> : null)}</dl></>
-                ) : <><h4>{i.title}</h4><p className="steps-muted">아직 질문에 답하지 않았어요.</p></>)}
-                {step === "definition" && (done ? <><span className="pad-badge">문제 카드</span><blockquote>{statement(i.refinement!)}</blockquote></> : <><h4>{i.title}</h4><p className="steps-muted">문제 카드를 만드는 중이에요.</p></>)}
+                {step === "questions" && <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p>{answered(i.refinement) ? (
+                  <dl>{questionFields.map(([k, label]) => i.refinement?.answers[k]?.trim() ? <div key={k}><dt>{label}</dt><dd>{i.refinement.answers[k]}</dd></div> : null)}</dl>
+                ) : <p className="steps-muted">아직 질문에 답하지 않았어요.</p>}</>}
+                {step === "definition" && (done ? <><blockquote>{statement(i.refinement!)}</blockquote><p className="pad-origin">출발 · {i.title}</p></> : <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p><p className="steps-muted">{answered(i.refinement) === questionFields.length ? "문제 카드를 만드는 중이에요." : "2단계 경험 질문부터 답해야 해요."}</p></>)}
                 <footer><Avatar member={owner} /><span>{owner?.name || "팀원"}{i.ownerId === me.id ? " · 나" : ""}</span><em><MessageCircle size={12} /> {commentCount(i.id)}</em></footer>
               </article>
             );
           })}
-          {members.filter((m) => !cards.some((i) => i.ownerId === m.id)).map((m) => (
-            <article key={m.id} className="pad-card ghost"><p className="steps-muted">아직 올린 카드가 없어요.</p><footer><Avatar member={m} /><span>{m.name}</span></footer></article>
-          ))}
+          {!cards.some((i) => reached(step, i)) && <div className="pad-none">아직 이 단계에 온 카드가 없어요. 앞 단계를 마친 카드부터 여기에 올라와요.</div>}
         </div>
+      )}
+      {writable && (cards.some((i) => !reached(step, i)) || members.some((m) => !cards.some((i) => i.ownerId === m.id))) && (
+        <section className="pad-waiting" aria-label="아직 앞 단계에 있는 카드">
+          <h4>아직 앞 단계에 있어요</h4>
+          <ul>
+            {cards.filter((i) => !reached(step, i)).map((i) => {
+              const owner = w.members.find((m) => m.id === i.ownerId);
+              return <li key={i.id}><button onClick={() => p.onIdea(i.id)}><Avatar member={owner} /><span><strong>{i.title}</strong><small>{owner?.name}{i.ownerId === me.id ? " · 나" : ""} · 2단계 경험 질문 {answered(i.refinement)}/{questionFields.length}</small></span><em>{i.ownerId === me.id ? "2단계부터 하기" : "앞 단계 진행 중"}</em></button></li>;
+            })}
+            {members.filter((m) => !cards.some((i) => i.ownerId === m.id)).map((m) => (
+              <li key={m.id}><div><Avatar member={m} /><span><strong>{m.name}</strong><small>1단계 생각 카드를 아직 올리지 않았어요</small></span></div></li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {step === "confirm" && (
@@ -352,6 +369,23 @@ export function ProjectSteps(p: StepsProps) {
         )}
       </dialog>
     </section>
+  );
+}
+
+/** Where a card stands across steps 1–3, and whether it still needs work in the step being viewed. */
+function CardProgress({ idea, step }: { idea: Idea; step: StepKey }) {
+  const n = answered(idea.refinement), total = questionFields.length, r = idea.refinement;
+  const parts: { label: string; state: "done" | "doing" | "todo" }[] = [
+    { label: "생각", state: "done" },
+    { label: n === total ? "경험" : `경험 ${n}/${total}`, state: n === total ? "done" : n ? "doing" : "todo" },
+    { label: "문제 카드", state: r?.ready ? "done" : r?.draft ? "doing" : "todo" },
+  ];
+  const here = step === "thought" ? 0 : step === "questions" ? 1 : 2, need = parts[here].state !== "done";
+  return (
+    <div className="pad-progress">
+      <span className={"pad-state " + (need ? "need" : "ok")}>{need ? (parts[here].state === "doing" ? "이 단계 작성 중" : "이 단계 해야 해요") : "이 단계 완료"}</span>
+      <ol>{parts.map((s, k) => <li key={k} className={s.state + (k === here ? " here" : "")}>{s.state === "done" ? <Check size={10} /> : k + 1} {s.label}</li>)}</ol>
+    </div>
   );
 }
 

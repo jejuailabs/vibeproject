@@ -48,10 +48,18 @@ export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePa
  }
  if(!editable)return <section className="refinement-read"><span className="refinement-badge">{refinementLabel(idea)}</span>{idea.refinement?<RefinementView value={idea.refinement}/>:<p>작성자가 질문에 답하면서 문제를 구체화하고 있어요. 아래 의견으로 경험과 질문을 보태주세요.</p>}</section>;
  const fields=panel==='questions'?questionFields:definitionFields;
+ // What the earlier steps said: shown above the form and handed to the coach so it continues from there.
+ const NL=String.fromCharCode(10);
+ const earlier=questionFields.filter(([k])=>value.answers[k].trim()).map(([k,label])=>label+' '+value.answers[k].trim()).join(NL);
+ const coachContext={title:idea.title,body:(panel==='definition'&&earlier?idea.body+NL+NL+'[2단계에서 답한 내용]'+NL+earlier:idea.body).slice(0,5000)};
  return <section className="refinement-editor" aria-label="생각 구체화와 문제정의">
   <header><span className="refinement-badge">{refinementLabel(idea)}</span><h3>이 생각을 문제로 다듬어볼까요?</h3><p>질문 세 개씩만 답하면 AI가 문제 카드로 정리해줘요.</p></header>
   <nav aria-label="생각 다듬기 단계" hidden={!!activePanel}><button type="button" aria-pressed={panel==='questions'} onClick={()=>setPanel('questions')}>1. 경험 · {answered(value)}/{questionFields.length}</button><button type="button" aria-pressed={panel==='definition'} disabled={answered(idea.refinement)!==questionFields.length} onClick={()=>setPanel('definition')}>2. 문제 카드</button></nav>
   {conflict&&<div role="alert" className="refinement-conflict">다른 변경이 먼저 저장됐어요. 입력은 유지했습니다. 최신 내용을 확인한 뒤 다시 작성해주세요.<button type="button" onClick={reload}>최신 저장본 불러오기</button></div>}
+  <div className="carry" aria-label="앞 단계에서 쓴 내용">
+   <span>1단계 · 내 생각</span><strong>{idea.title}</strong><p>{idea.body}</p>
+   {panel==='definition'&&earlier&&<><span>2단계 · 경험</span><dl>{questionFields.map(([k,label])=>value.answers[k].trim()?<div key={k}><dt>{label}</dt><dd>{value.answers[k]}</dd></div>:null)}</dl></>}
+  </div>
   <div className={coach?'write-grid':''}>
   <form onSubmit={e=>{e.preventDefault();void save(panel);}}>
    <fieldset disabled={busy||conflict}>
@@ -70,7 +78,7 @@ export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePa
    </fieldset>
   </form>
   {coach&&<div className="write-aside">
-   <AICoach key={idea.id+panel} phase={panel} ask={coach} aiEnabled={aiEnabled} disabled={busy||conflict} context={{title:idea.title,body:idea.body}}
+   <AICoach key={idea.id+panel} phase={panel} ask={coach} aiEnabled={aiEnabled} disabled={busy||conflict} context={coachContext}
     values={panel==='questions'?Object.fromEntries(questionFields.map(([k])=>[k,value.answers[k]])):Object.fromEntries(definitionFields.map(([k])=>[k,value.definition[k]]))}
     onApply={(k,t)=>panel==='questions'?setAnswer(k,t):setDef(k,t)}/>
    <CardPreview phase={panel} member={owner} title={idea.title} refinement={value}/>

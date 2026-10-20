@@ -29,15 +29,35 @@ export function AICoach({ phase, values, context, ask, aiEnabled, disabled, onAp
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" }); }, [turns, waiting]);
   const label = fields.find((f) => f.key === field)?.label || "";
 
-  async function open(next: string, latest: Record<string, string>) {
-    setField(next); setError(""); setDone(false); setWaiting(true);
-    let question = coachQuestion(phase, next);
-    try {
-      const r = await ask({ phase, field: next, action: "open", values: latest, context: { ...context, ...(phase === "thought" ? { title: latest.title ?? context.title, body: latest.body ?? context.body } : {}) }, history: [] });
-      setEngine(r.engine); question = r.reply || question;
-    } catch { /* keep the default question */ }
-    setTurns((t) => { fieldStart.current = t.length; return [...t, { role: "coach", text: question }]; });
-    setWaiting(false);
+  // Opens a field. When earlier steps already answer it, the coach fills it and moves on by itself,
+  // so the writer is only asked about what is still missing.
+  async function open(first: string, start: Record<string, string>) {
+    let next: string | null = first, latest = start;
+    setError(""); setDone(false); setWaiting(true);
+    while (next) {
+      const key: string = next;
+      setField(key);
+      let question = coachQuestion(phase, key);
+      try {
+        const r = await ask({ phase, field: key, action: "open", values: latest, context: { ...context, ...(phase === "thought" ? { title: latest.title ?? context.title, body: latest.body ?? context.body } : {}) }, history: [] });
+        setEngine(r.engine);
+        const name = fields.find((f) => f.key === key)?.label || "";
+        if (!r.needsMore && r.suggestion.trim()) {
+          onApply(key, r.suggestion);
+          latest = { ...latest, [key]: r.suggestion };
+          setTurns((t) => [...t, { role: "coach", text: "✓ “" + name + "” 칸은 앞에서 쓴 내용으로 채웠어요. 다르면 왼쪽에서 고쳐주세요." }]);
+          next = nextOpenField(phase, latest, key);
+          continue;
+        }
+        if (r.suggestion.trim() && !latest[key]?.trim()) onApply(key, r.suggestion);
+        question = r.reply || question;
+      } catch { /* keep the default question */ }
+      setTurns((t) => { fieldStart.current = t.length; return [...t, { role: "coach", text: question }]; });
+      setWaiting(false);
+      return;
+    }
+    setDone(true); setWaiting(false);
+    setTurns((t) => [...t, { role: "coach", text: "앞에서 쓴 내용으로 이 단계 칸이 다 채워졌어요. 왼쪽 내용을 확인하고, 다르면 고친 뒤 저장해주세요." }]);
   }
   useEffect(() => {
     if (started.current) return;
