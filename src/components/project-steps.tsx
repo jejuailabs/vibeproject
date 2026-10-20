@@ -114,6 +114,10 @@ export function ProjectSteps(p: StepsProps) {
       setPick(""); setReason("");
     }
   }
+  // My own unlocked card opens the writing window with the AI coach; anyone else's opens the full card.
+  const canContinue = (i: Idea) => i.ownerId === me.id && i.state === "shared" && !ended;
+  function continueAt(at: StepKey, i: Idea) { setSelectedId(i.id); setStep(at); setWriting(true); }
+  function openCard(i: Idea) { if (step && step !== "thought" && canContinue(i)) continueAt(step, i); else p.onIdea(i.id); }
   const castVote = (ideaId: string) => p.run({ type: "castTeamVote", projectId: team.id, ideaId });
 
   if (history !== null)
@@ -191,8 +195,9 @@ export function ProjectSteps(p: StepsProps) {
             return (
               <article key={i.id} className={"pad-card" + (done ? "" : " waiting")} style={{ background: done ? tones[n % tones.length] : undefined }} role="button" tabIndex={0}
                 aria-label={(owner?.name || "팀원") + "의 카드 전체 보기 · " + i.title}
-                onClick={() => p.onIdea(i.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); p.onIdea(i.id); } }}>
+                onClick={() => openCard(i)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openCard(i); } }}>
                 <CardProgress idea={i} step={step} />
+                {canContinue(i) && step !== "thought" && <span className="pad-continue">{cardDone(step, i) ? "눌러서 고치기 · AI 코치" : "눌러서 이어 쓰기 · AI 코치"}</span>}
                 {step === "thought" && <><h4>{i.title}</h4><p>{i.body}</p></>}
                 {step === "questions" && <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p>{answered(i.refinement) ? (
                   <dl>{questionFields.map(([k, label]) => i.refinement?.answers[k]?.trim() ? <div key={k}><dt>{label}</dt><dd>{i.refinement.answers[k]}</dd></div> : null)}</dl>
@@ -211,7 +216,7 @@ export function ProjectSteps(p: StepsProps) {
           <ul>
             {cards.filter((i) => !reached(step, i)).map((i) => {
               const owner = w.members.find((m) => m.id === i.ownerId);
-              return <li key={i.id}><button onClick={() => p.onIdea(i.id)}><Avatar member={owner} /><span><strong>{i.title}</strong><small>{owner?.name}{i.ownerId === me.id ? " · 나" : ""} · 2단계 경험 질문 {answered(i.refinement)}/{questionFields.length}</small></span><em>{i.ownerId === me.id ? "2단계부터 하기" : "앞 단계 진행 중"}</em></button></li>;
+              return <li key={i.id}><button onClick={() => (canContinue(i) ? continueAt("questions", i) : p.onIdea(i.id))}><Avatar member={owner} /><span><strong>{i.title}</strong><small>{owner?.name}{i.ownerId === me.id ? " · 나" : ""} · 2단계 경험 질문 {answered(i.refinement)}/{questionFields.length}</small></span><em>{i.ownerId === me.id ? "2단계부터 하기" : "앞 단계 진행 중"}</em></button></li>;
             })}
             {members.filter((m) => !cards.some((i) => i.ownerId === m.id)).map((m) => (
               <li key={m.id}><div><Avatar member={m} /><span><strong>{m.name}</strong><small>1단계 생각 카드를 아직 올리지 않았어요</small></span></div></li>
