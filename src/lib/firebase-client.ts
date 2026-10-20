@@ -2,12 +2,12 @@ import { getApps, initializeApp } from 'firebase/app';
 import { browserPopupRedirectResolver, browserSessionPersistence, getAuth, initializeAuth, type Auth } from 'firebase/auth';
 export const firebaseConfigured = Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY && process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID);
 let auth: Auth | null = null;
-// A refresh keeps the tab's login; arriving at the site any other way (typed address, link, reopened tab) starts signed out.
+// The login lives only in this tab's sessionStorage, so any reload of the tab keeps it and a new or reopened tab starts
+// signed out. It is never wiped on load: telling a refresh apart by navigation type failed for refreshes Chrome reports as
+// "navigate" (Enter in the address bar, some reload buttons), which sent people back to the login screen.
 function forgetStoredLogins() {
  try {
-  const reload = (performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined)?.type === 'reload';
-  const stores = reload ? [localStorage] : [localStorage, sessionStorage];
-  for (const store of stores) for (const key of Object.keys(store)) if (key.startsWith('firebase:authUser:')) store.removeItem(key);
+  for (const key of Object.keys(localStorage)) if (key.startsWith('firebase:authUser:')) localStorage.removeItem(key);
   // Logins kept by earlier versions in IndexedDB are wiped so they can never sign anyone in.
   indexedDB.deleteDatabase('firebaseLocalStorageDb');
  } catch {}
