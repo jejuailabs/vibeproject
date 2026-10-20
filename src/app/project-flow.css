@@ -134,7 +134,23 @@
 .pad-waiting strong{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pad-waiting small{font-size:11px;color:#8e869a}
 .pad-waiting em{font-style:normal;font-size:11px;font-weight:800;color:#9a5b00;white-space:nowrap}
-/* The card detail window is narrow: stack the form and the AI coach. */
-.detail-modal .write-grid{grid-template-columns:1fr}
-.detail-modal .write-aside{position:static}
+/* My own card opens wide so the form and the AI coach sit side by side, like the step writing window. */
+.detail-modal.wide{width:min(1180px,calc(100vw - 32px));max-width:none}
+.detail-modal:not(.wide) .write-grid{grid-template-columns:1fr}
+.detail-modal:not(.wide) .write-aside{position:static}
+.detail-modal.wide .write-aside{top:0}
+@media(max-width:900px){.detail-modal.wide .write-grid{grid-template-columns:1fr}.detail-modal.wide .write-aside{position:static}}
 .pad-continue{align-self:flex-start;font-size:11px;font-weight:800;color:#fff;background:#7854b8;border-radius:999px;padding:3px 10px}
+/* Card author on top: big profile, nickname, and a clear "나" on my own cards. */
+.pad-owner{display:flex;align-items:center;gap:10px;margin:-2px 0 2px}
+.pad-owner-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;object-position:top;background:#fff;border:2px solid #fff;box-shadow:0 2px 8px #2c193f26;flex-shrink:0}
+.pj .pad-owner strong{font-size:15px;font-weight:800;color:#2c2937;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pad-me{flex-shrink:0;font-size:12px;font-weight:900;color:#fff;background:#ff6b3d;border-radius:999px;padding:3px 10px;box-shadow:0 2px 6px #ff6b3d55}
+.pad-card.mine{box-shadow:0 0 0 3px #ff6b3d,0 8px 20px #1a0f2a40}
+.pad-card.mine .pad-owner-avatar{border-color:#ff6b3d}
+.pad-card footer{justify-content:flex-end}
+.pad-card.mine.picked{box-shadow:0 0 0 3px #7854b8,0 8px 20px #1a0f2a40}
+.pad-card.mine.chosen{box-shadow:0 0 0 3px #e0a32c,0 8px 20px #1a0f2a40}
+/* The detail window already shows the card above, so drop the repeat and the intro to bring the coach up. */
+.detail-modal.wide .carry,.detail-modal.wide .refinement-editor>header{display:none}
+.detail-modal.wide .refinement-editor{margin-top:12px}

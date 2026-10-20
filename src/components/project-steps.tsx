@@ -193,9 +193,10 @@ export function ProjectSteps(p: StepsProps) {
           {cards.filter((i) => reached(step, i)).map((i, n) => {
             const owner = w.members.find((m) => m.id === i.ownerId), done = cardDone(step, i);
             return (
-              <article key={i.id} className={"pad-card" + (done ? "" : " waiting")} style={{ background: done ? tones[n % tones.length] : undefined }} role="button" tabIndex={0}
+              <article key={i.id} className={"pad-card" + (done ? "" : " waiting") + (i.ownerId === me.id ? " mine" : "")} style={{ background: done ? tones[n % tones.length] : undefined }} role="button" tabIndex={0}
                 aria-label={(owner?.name || "팀원") + "의 카드 전체 보기 · " + i.title}
                 onClick={() => openCard(i)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openCard(i); } }}>
+                <Owner member={owner} mine={i.ownerId === me.id} />
                 <CardProgress idea={i} step={step} />
                 {canContinue(i) && step !== "thought" && <span className="pad-continue">{cardDone(step, i) ? "눌러서 고치기 · AI 코치" : "눌러서 이어 쓰기 · AI 코치"}</span>}
                 {step === "thought" && <><h4>{i.title}</h4><p>{i.body}</p></>}
@@ -203,7 +204,7 @@ export function ProjectSteps(p: StepsProps) {
                   <dl>{questionFields.map(([k, label]) => i.refinement?.answers[k]?.trim() ? <div key={k}><dt>{label}</dt><dd>{i.refinement.answers[k]}</dd></div> : null)}</dl>
                 ) : <p className="steps-muted">아직 질문에 답하지 않았어요.</p>}</>}
                 {step === "definition" && (done ? <><blockquote>{statement(i.refinement!)}</blockquote><p className="pad-origin">출발 · {i.title}</p></> : <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p><p className="steps-muted">{answered(i.refinement) === questionFields.length ? "문제 카드를 만드는 중이에요." : "2단계 경험 질문부터 답해야 해요."}</p></>)}
-                <footer><Avatar member={owner} /><span>{owner?.name || "팀원"}{i.ownerId === me.id ? " · 나" : ""}</span><em><MessageCircle size={12} /> {commentCount(i.id)}</em></footer>
+                <footer><em><MessageCircle size={12} /> 의견 {commentCount(i.id)}</em></footer>
               </article>
             );
           })}
@@ -255,7 +256,8 @@ export function ProjectSteps(p: StepsProps) {
                 const open = vote?.data.state === "open" && vote.data.candidateIds.includes(i.id), mineVote = myBallot?.data.ideaId === i.id;
                 const count = vote?.data.counts[i.id] || 0;
                 return (
-                  <article key={i.id} className={"pad-card" + (pick === i.id ? " picked" : "") + (chosen ? " chosen" : "")} style={{ background: tones[n % tones.length] }}>
+                  <article key={i.id} className={"pad-card" + (pick === i.id ? " picked" : "") + (chosen ? " chosen" : "") + (i.ownerId === me.id ? " mine" : "")} style={{ background: tones[n % tones.length] }}>
+                    <Owner member={owner} mine={i.ownerId === me.id} />
                     {chosen && <span className="pad-badge"><Crown size={12} /> 확정</span>}
                     <blockquote>{statement(i.refinement!)}</blockquote>
                     {vote?.data.state === "closed" && <span className="pad-count">{count}표</span>}
@@ -264,7 +266,7 @@ export function ProjectSteps(p: StepsProps) {
                       {open && !ended && <button type="button" className={mineVote ? "primary-button" : "secondary-button"} disabled={p.busy} onClick={() => castVote(i.id)}>{mineVote ? <><Check size={14} /> 내 선택</> : "이 문제에 투표"}</button>}
                       {leader && !ended && vote?.data.state !== "open" && <label className="pad-pick"><input type="radio" name="problem" checked={pick === i.id} onChange={() => setPick(i.id)} /> 확정 후보</label>}
                     </div>
-                    <footer><Avatar member={owner} /><span>{owner?.name}{i.ownerId === me.id ? " · 나" : ""}</span><em><MessageCircle size={12} /> {commentCount(i.id)}</em></footer>
+                    <footer><em><MessageCircle size={12} /> 의견 {commentCount(i.id)}</em></footer>
                   </article>
                 );
               })}
@@ -374,6 +376,17 @@ export function ProjectSteps(p: StepsProps) {
         )}
       </dialog>
     </section>
+  );
+}
+
+/** Who wrote the card, at the top where it is seen first; my own cards say so plainly. */
+function Owner({ member, mine }: { member?: Member; mine: boolean }) {
+  return (
+    <div className="pad-owner">
+      <img className="pad-owner-avatar" src={characterFor(member).image} alt="" />
+      <strong>{member?.name || "팀원"}</strong>
+      {mine && <span className="pad-me">나</span>}
+    </div>
   );
 }
 
