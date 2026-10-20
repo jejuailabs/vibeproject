@@ -188,3 +188,6 @@
 .pad-card .problem-card{margin:0 -4px}
 .problem-card-maker>.problem-card{margin-top:2px}
 .problem-card .pad-count{font-size:15px;font-weight:900;color:#fff;background:#7854b8;border-radius:999px;padding:3px 11px}
+.pj-vote-open{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pj-vote-open label{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#4c3f5c}
+.pj-vote-open select{border:1px solid #d9cceb;border-radius:9px;padding:7px 9px;background:#fff;color:#3e3249;font-weight:700}

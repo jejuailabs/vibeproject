@@ -207,8 +207,9 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       if (ideas.length < 1) fail("완성된 문제 카드가 있어야 투표를 열 수 있습니다.");
       const old = await optional(c, "teamvote-" + p.id, "teamVote");
       if (old?.data.state === "open") fail("이미 투표가 열려 있습니다.");
-      write(c, "teamvote-" + p.id, "teamVote", { round: (old?.data.round || 0) + 1, state: "open", candidateIds: ideas.map((i) => i.id), counts: {}, voters: 0, openedAt: c.now, closedAt: null }, "project", p.id, c.uid, old);
-      event(c, "투표 열기", "문제 카드 " + ideas.length + "개", p.id, p.id);
+      const maxVotes = Math.min(cmd.maxVotes || 1, ideas.length);
+      write(c, "teamvote-" + p.id, "teamVote", { round: (old?.data.round || 0) + 1, state: "open", candidateIds: ideas.map((i) => i.id), counts: {}, voters: 0, openedAt: c.now, closedAt: null, maxVotes }, "project", p.id, c.uid, old);
+      event(c, "투표 열기", "문제 카드 " + ideas.length + "개 · 1인당 " + maxVotes + "표", p.id, p.id);
       for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "리더가 함께 풀 문제 투표를 열었습니다.", p.id, "project");
       return { id: p.id };
     }
@@ -219,12 +220,19 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       if (!vote.data.candidateIds.includes(cmd.ideaId)) fail("투표 후보 카드만 고를 수 있습니다.");
       const ballotId = "teamballot-" + p.id + "-" + c.uid;
       const prior = await optional(c, ballotId, "teamBallot");
-      const counts = { ...vote.data.counts };
-      const same = prior?.data.round === vote.data.round;
-      if (same) counts[prior.data.ideaId] = Math.max(0, (counts[prior.data.ideaId] || 0) - 1);
-      counts[cmd.ideaId] = (counts[cmd.ideaId] || 0) + 1;
-      write(c, ballotId, "teamBallot", { round: vote.data.round, ideaId: cmd.ideaId }, "project", p.id, c.uid, prior);
-      write(c, vote.id, "teamVote", { ...vote.data, counts, voters: vote.data.voters + (same ? 0 : 1) }, "project", p.id, vote.ownerId, vote);
+      // Picking a chosen card again takes the vote back; with one vote a new pick replaces the old one.
+      const max = vote.data.maxVotes || 1, counts = { ...vote.data.counts };
+      const before = prior?.data.round === vote.data.round ? prior.data.ideaIds ?? (prior.data.ideaId ? [prior.data.ideaId] : []) : [];
+      let picks = [...before];
+      if (picks.includes(cmd.ideaId)) picks = picks.filter((id) => id !== cmd.ideaId);
+      else if (picks.length < max) picks.push(cmd.ideaId);
+      else if (max === 1) picks = [cmd.ideaId];
+      else fail("한 사람당 " + max + "개까지 고를 수 있어요. 고른 카드 하나를 먼저 취소해주세요.");
+      for (const id of before) counts[id] = Math.max(0, (counts[id] || 0) - 1);
+      for (const id of picks) counts[id] = (counts[id] || 0) + 1;
+      const voters = vote.data.voters + (!before.length && picks.length ? 1 : before.length && !picks.length ? -1 : 0);
+      write(c, ballotId, "teamBallot", { round: vote.data.round, ideaIds: picks }, "project", p.id, c.uid, prior);
+      write(c, vote.id, "teamVote", { ...vote.data, counts, voters }, "project", p.id, vote.ownerId, vote);
       return { id: p.id };
     }
     case "closeTeamVote": {
