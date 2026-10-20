@@ -1,7 +1,7 @@
 "use client";
 import { useState, useId, type ReactNode } from "react";
 import type { Workspace } from "@/lib/types";
-import type { CardAsk, CoachAsk } from "@/lib/coaching";
+import type { CardAsk, CoachAsk, DraftAsk } from "@/lib/coaching";
 import type {
   WorkshopRecord,
   Kind,
@@ -17,6 +17,7 @@ export type Props = {
   ai?: Snapshot["ai"];
   askCoach?: CoachAsk;
   makeCard?: CardAsk;
+  makeDraft?: DraftAsk;
   invites?: Snapshot["invites"];
   download?: (id: string) => Promise<void>;
   upload?: (

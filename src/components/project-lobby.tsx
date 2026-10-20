@@ -28,7 +28,8 @@ type Props = {
 export function ProjectLobby({ workspace: w, records, busy, preview, invite, run, onEnter, onInviteHandled }: Props) {
   const me = w.me,
     mine = projectIdsOf(me);
-  const [mode, setMode] = useState<"join" | "create">(mine.length ? "join" : "create");
+  // Open on the list of existing projects whenever there is one to join; creating is the fallback.
+  const [mode, setMode] = useState<"join" | "create">(mine.length || w.projects.some((p) => !mine.includes(p.id) && p.mode !== "solo") ? "join" : "create");
   const [query, setQuery] = useState(""),
     [passwords, setPasswords] = useState<Record<string, string>>({}),
     [copied, setCopied] = useState(false),

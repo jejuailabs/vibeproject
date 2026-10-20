@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Crown, MessageCircle, Plus, Vote, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Crown, MessageCircle, Plus, Sparkles, Vote, X } from "lucide-react";
 import { IdeaRefinement } from "./idea-refinement";
 import { characterFor } from "@/lib/characters";
 import { canReadIdea } from "@/lib/policy";
-import { answered, questionFields, statement } from "@/lib/refinement";
+import { answered, definitionFields, questionFields, statement } from "@/lib/refinement";
 import { docKeys, docNames, type DocKey } from "@/lib/workshop/model";
 import { recordsOf, type Props } from "./workshop/common";
 import type { Command, Idea, Member, Project } from "@/lib/types";
@@ -13,6 +13,8 @@ import { ProjectTimeline } from "./project-timeline";
 import { ProjectExhibit } from "./project-exhibit";
 import { AICoach } from "./ai-coach";
 import { CardPreview, ProblemCard } from "./card-view";
+import { QuickDraft, draftRefinement } from "./quick-draft";
+import type { DraftFields } from "@/lib/coaching";
 
 const steps: { key: StepKey; name: string; title: string; hint: string; group: "find" | "make" }[] = [
   { key: "thought", name: "각자 생각", title: "어떤 순간이 불편했나요?", hint: "직접 겪은 일 하나를 짧게 올려요.", group: "find" },
@@ -56,7 +58,7 @@ export function ProjectSteps(p: StepsProps) {
   );
   const mine = cards.filter((i) => i.ownerId === me.id);
   const [step, setStep] = useState<StepKey | null>(p.initialStep ?? null);
-  const [writing, setWriting] = useState(false);
+  const [writing, setWriting] = useState(false), [quick, setQuick] = useState(false);
   const [selectedId, setSelectedId] = useState((mine.find((i) => i.state === "shared") || mine[0])?.id || "");
   const myCard = mine.find((i) => i.id === selectedId) || mine.find((i) => i.state === "shared") || mine[0];
   const [title, setTitle] = useState(""), [body, setBody] = useState("");
@@ -67,7 +69,7 @@ export function ProjectSteps(p: StepsProps) {
   useEffect(() => { if (step) onStepChange(step); }, [step, onStepChange]);
   useEffect(() => {
     if (writing && !composer.current?.open) composer.current?.showModal();
-    else if (!writing) composer.current?.close();
+    else if (!writing) { composer.current?.close(); setQuick(false); }
   }, [writing]);
 
   const docs = recordsOf(p, "document").filter((x) => x.projectId === team.id && !x.data.redacted && x.data.markdown.trim());
@@ -104,6 +106,18 @@ export function ProjectSteps(p: StepsProps) {
     [team, cards, w.events, w.comments, w.messages, p.records],
   );
 
+  // One-shot draft: a new card goes through all three saves (thought, experience, problem card) in order.
+  async function saveDraft(f: DraftFields) {
+    const r = draftRefinement(f);
+    let id = "";
+    if (!(await p.saveIdea({ type: "createIdea", title: f.title.trim().slice(0, 120), body: f.body.trim().slice(0, 5000), kind: "thought", scope: "project" }, (res) => { id = res.id || ""; })) || !id) return;
+    const input = { answers: r.answers, definition: r.definition, ready: false };
+    const reason = "AI로 한 번에 정리";
+    if (questionFields.some(([k]) => r.answers[k].trim()) && !(await p.saveIdea({ type: "refineIdea", id, revision: 1, phase: "questions", input, reason, scope: "project" }))) return;
+    if (questionFields.every(([k]) => r.answers[k].trim()) && definitionFields.some(([k]) => r.definition[k].trim()))
+      await p.saveIdea({ type: "refineIdea", id, revision: 2, phase: "definition", input: { ...input, ready: r.ready }, reason, scope: "project" });
+    setSelectedId(id); setWriting(false); setStep(r.ready ? "definition" : questionFields.every(([k]) => r.answers[k].trim()) ? "definition" : "questions");
+  }
   async function createCard(e: FormEvent) {
     e.preventDefault();
     await p.saveIdea({ type: "createIdea", title: title.trim(), body: body.trim(), kind: "thought", scope: "project" }, (r) => {
@@ -183,7 +197,10 @@ export function ProjectSteps(p: StepsProps) {
           <h2>{spec.title}</h2>
           <p>{spec.hint}</p>
         </div>
-        {writable && !ended && <button className="pj-write" onClick={() => setWriting(true)}><Plus size={17} /> {writeLabel}</button>}
+        {writable && !ended && <div className="pj-write-row">
+          {p.makeDraft && <button className="pj-quick" onClick={() => { setQuick(true); setWriting(true); }}><Sparkles size={16} /> 긴 글·파일로 한 번에</button>}
+          <button className="pj-write" onClick={() => setWriting(true)}><Plus size={17} /> {writeLabel}</button>
+        </div>}
       </header>
       {ended && <p className="steps-note">종료된 기수입니다. 남긴 기록을 둘러보세요.</p>}
       {team.confirmedProblem && step !== "confirm" && <p className="steps-problem"><Crown size={14} /> 확정한 문제 · {team.confirmedProblem.statement}</p>}
@@ -346,15 +363,17 @@ export function ProjectSteps(p: StepsProps) {
         {writing && writable && (
           <>
             <header>
-              <div><span>STEP {index + 1} · {spec.name}</span><h3>{spec.title}</h3></div>
-              {step !== "thought" && mine.length > 1 && (
+              <div><span>{quick ? "AI로 한 번에 · 1·2·3단계와 문제 카드" : "STEP " + (index + 1) + " · " + spec.name}</span><h3>{quick ? "긴 글이나 파일로 문제 카드까지 만들어요" : spec.title}</h3></div>
+              {!quick && step !== "thought" && mine.length > 1 && (
                 <select aria-label="이어 쓸 내 카드" value={myCard?.id} onChange={(e) => setSelectedId(e.target.value)} disabled={p.busy}>
                   {mine.map((i) => <option key={i.id} value={i.id}>{i.title}</option>)}
                 </select>
               )}
               <button className="icon-button" aria-label="닫기" onClick={() => setWriting(false)}><X size={20} /></button>
             </header>
-            {step === "thought" ? (
+            {quick && p.makeDraft ? (
+              <QuickDraft ask={p.makeDraft} member={me} doneLabel="새 카드로 저장하기" onDone={saveDraft} onCancel={() => setWriting(false)} />
+            ) : step === "thought" ? (
               <div className={p.askCoach ? "write-grid" : ""}>
                 <form className="steps-form" onSubmit={createCard}>
                   <label>무슨 일이었나요?<input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} required placeholder="예: 모임에 처음 가면 누구에게 말을 걸지 모르겠어요" disabled={p.busy} /></label>
@@ -375,7 +394,7 @@ export function ProjectSteps(p: StepsProps) {
             ) : myCard.state !== "shared" ? (
               <div className="steps-empty"><p>이 카드는 {myCard.state === "selected" ? "프로젝트 출발 카드로" : "투표·종료로"} 고정되어 고칠 수 없어요.</p><button className="primary-button" onClick={() => setStep("thought")}><Plus size={15} /> 새 생각 올리기</button></div>
             ) : (
-              <IdeaRefinement key={myCard.id + step} idea={myCard} editable hasProject teamOnly busy={p.busy} run={p.saveIdea} activePanel={step === "definition" ? "definition" : "questions"} onPanelChange={(panel) => setStep(panel)} coach={p.askCoach} makeCard={p.makeCard} aiEnabled={p.ai?.enabled} owner={me} />
+              <IdeaRefinement key={myCard.id + step} idea={myCard} editable hasProject teamOnly busy={p.busy} run={p.saveIdea} activePanel={step === "definition" ? "definition" : "questions"} onPanelChange={(panel) => setStep(panel)} coach={p.askCoach} makeCard={p.makeCard} makeDraft={p.makeDraft} aiEnabled={p.ai?.enabled} owner={me} />
             )}
           </>
         )}

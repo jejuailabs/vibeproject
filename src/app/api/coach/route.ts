@@ -4,13 +4,14 @@ import { authenticatedUid } from "@/server/firebase";
 import { coach } from "@/server/coach";
 import { DomainError } from "@/lib/policy";
 export const runtime = "nodejs";
-export const maxDuration = 40;
+export const maxDuration = 60;
 export async function POST(request: Request) {
   try {
     const user = await authenticatedUid(request);
     if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
     const raw = await request.text();
-    if (raw.length > 40000) return NextResponse.json({ error: "요청이 너무 깁니다." }, { status: 413 });
+    // Drafts may carry attached files; everything else stays small.
+    if (raw.length > (raw.includes('"kind":"draft"') ? 4_400_000 : 40000)) return NextResponse.json({ error: "요청이 너무 깁니다. 파일 크기를 줄여주세요." }, { status: 413 });
     return NextResponse.json(await coach(user.uid, JSON.parse(raw)));
   } catch (e) {
     return NextResponse.json(

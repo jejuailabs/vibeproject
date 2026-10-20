@@ -2,7 +2,8 @@
 import {useState} from 'react';
 import {LoaderCircle,Sparkles} from 'lucide-react';
 import type {Idea,Command,Scope,Member} from '@/lib/types';
-import type {CardAsk,CoachAsk} from '@/lib/coaching';
+import type {CardAsk,CoachAsk,DraftAsk,DraftFields} from '@/lib/coaching';
+import {QuickDraft,draftRefinement} from './quick-draft';
 import {AICoach} from './ai-coach';
 import {CardPreview,ProblemCard,RefinementView} from './card-view';
 import {questionFields,definitionFields,sentenceFields,emptyRefinement,answered,refinementLabel,statement,solutionHints,type Refinement} from '@/lib/refinement';
@@ -11,12 +12,13 @@ export function RefinementSummary({value}:{value?:Refinement}){
  return <details className="refinement-summary"><summary>마지막으로 저장한 내용 {value.draft?`· 초안 ${value.draft}`:''}{value.ready?' · 완성':''}</summary><RefinementView value={value}/></details>;
 }
 type Panel='questions'|'definition';
-export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePanel,onPanelChange,teamOnly,coach,makeCard,aiEnabled,owner}:{idea:Idea;editable:boolean;hasProject:boolean;busy:boolean;error?:string;run:(c:Command)=>Promise<boolean>;activePanel?:Panel;onPanelChange?:(panel:Panel)=>void;teamOnly?:boolean;coach?:CoachAsk;makeCard?:CardAsk;aiEnabled?:boolean;owner?:Member}){
+export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePanel,onPanelChange,teamOnly,coach,makeCard,makeDraft,aiEnabled,owner}:{idea:Idea;editable:boolean;hasProject:boolean;busy:boolean;error?:string;run:(c:Command)=>Promise<boolean>;activePanel?:Panel;onPanelChange?:(panel:Panel)=>void;teamOnly?:boolean;coach?:CoachAsk;makeCard?:CardAsk;makeDraft?:DraftAsk;aiEnabled?:boolean;owner?:Member}){
  const [value,setValue]=useState<Refinement>(()=>structuredClone(idea.refinement||emptyRefinement()));
  const [base,setBase]=useState(idea.revision),[scope,setScope]=useState<Scope>(idea.scope);
  const [localPanel,setLocalPanel]=useState<Panel>(answered(idea.refinement)===questionFields.length?'definition':'questions');
  const panel=activePanel||localPanel;
  function setPanel(next:Panel){setLocalPanel(next);onPanelChange?.(next);}
+ const [quick,setQuick]=useState(false);
  const [saved,setSaved]=useState(''),[making,setMaking]=useState(false),[cardNote,setCardNote]=useState('');
  const conflict=base!==idea.revision, complete=answered(value)===questionFields.length;
  const asked=definitionFields.every(([k])=>value.definition[k].trim());
@@ -56,6 +58,11 @@ export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePa
   <header><span className="refinement-badge">{refinementLabel(idea)}</span><h3>이 생각을 문제로 다듬어볼까요?</h3><p>질문 세 개씩만 답하면 AI가 문제 카드로 정리해줘요.</p></header>
   <nav aria-label="생각 다듬기 단계" hidden={!!activePanel}><button type="button" aria-pressed={panel==='questions'} onClick={()=>setPanel('questions')}>1. 경험 · {answered(value)}/{questionFields.length}</button><button type="button" aria-pressed={panel==='definition'} disabled={answered(idea.refinement)!==questionFields.length} onClick={()=>setPanel('definition')}>2. 문제 카드</button></nav>
   {conflict&&<div role="alert" className="refinement-conflict">다른 변경이 먼저 저장됐어요. 입력은 유지했습니다. 최신 내용을 확인한 뒤 다시 작성해주세요.<button type="button" onClick={reload}>최신 저장본 불러오기</button></div>}
+  {makeDraft&&!quick&&<button type="button" className="quick-open" disabled={busy||conflict} onClick={()=>setQuick(true)}><Sparkles size={15}/> 긴 글·파일로 한 번에 채우기 <small>AI가 2·3단계와 문제 카드를 채워줘요</small></button>}
+  {makeDraft&&quick&&<QuickDraft ask={makeDraft} member={owner} doneLabel="이 카드에 채우기"
+   initial={{title:idea.title,body:idea.body,who:value.answers.who,whenWhere:value.answers.whenWhere,workaround:value.answers.workaround,why:value.definition.why,change:value.definition.change,focus:value.definition.focus,sWho:value.definition.who,situation:value.definition.situation,cause:value.definition.cause,difficulty:value.definition.difficulty}}
+   onCancel={()=>setQuick(false)}
+   onDone={(f:DraftFields)=>{const r=draftRefinement(f);setValue(v=>({...v,answers:{...v.answers,...r.answers},definition:{...v.definition,...r.definition},ready:false}));setQuick(false);setSaved('AI가 채운 내용을 넣었어요. 확인하고 "'+(answered(r)===questionFields.length?'문제 카드 완성':'저장')+'"을 눌러주세요.');setPanel(answered(r)===questionFields.length?'definition':'questions');}}/>}
   <div className="carry" aria-label="앞 단계에서 쓴 내용">
    <span>1단계 · 내 생각</span><strong>{idea.title}</strong><p>{idea.body}</p>
    {panel==='definition'&&earlier&&<><span>2단계 · 경험</span><dl>{questionFields.map(([k,label])=>value.answers[k].trim()?<div key={k}><dt>{label}</dt><dd>{value.answers[k]}</dd></div>:null)}</dl></>}

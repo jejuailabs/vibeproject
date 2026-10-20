@@ -69,3 +69,32 @@ const clip=(v:string|undefined,n=120)=>(v||'').trim().split(/[.,\n]/)[0].replace
 export function basicCard(i:CardInput):CardReply{
  return {who:clip(i.answers.who),situation:clip(i.answers.whenWhere),cause:'',difficulty:'',engine:'basic'};
 }
+
+// One-shot draft: a long rough text and/or files become steps 1–3 and the problem card at once.
+// Whatever the material does not cover comes back as easy follow-up questions; answering them redrafts.
+export const draftKeys=['title','body','who','whenWhere','workaround','why','change','focus','sWho','situation','cause','difficulty'] as const;
+export type DraftKey=(typeof draftKeys)[number];
+export type DraftFields=Record<DraftKey,string>;
+export type DraftFile={name:string;type:string;data:string};
+export type DraftInput={text:string;files:DraftFile[];current?:DraftFields;answers?:{field:DraftKey;question:string;answer:string}[]};
+export type DraftReply={fields:DraftFields;missing:{field:DraftKey;question:string}[];engine:'ai'|'basic'};
+export type DraftAsk=(input:DraftInput)=>Promise<DraftReply>;
+export const draftFileTypes=['application/pdf','image/png','image/jpeg','image/webp'];
+export const DRAFT_FILE_BYTES=3_000_000;
+const fieldsShape=Object.fromEntries(draftKeys.map(k=>[k,z.string().max(k==='body'?3000:700)])) as Record<DraftKey,z.ZodString>;
+export const draftRequest=z.object({
+ cohortId:id,kind:z.literal('draft'),text:z.string().max(20000),
+ files:z.array(z.object({name:z.string().max(200),type:z.enum(draftFileTypes as [string,...string[]]),data:z.string().max(4_200_000)}).strict()).max(3),
+ current:z.object(fieldsShape).strict().optional(),
+ answers:z.array(z.object({field:z.enum(draftKeys),question:z.string().max(500),answer:z.string().max(2000)}).strict()).max(12).optional(),
+}).strict().refine(r=>r.text.trim().length>0||r.files.length>0||!!r.answers?.length,{message:'empty'});
+export const draftOutput=z.object({...fieldsShape,missing:z.array(z.object({field:z.enum(draftKeys),question:z.string().max(300)}).strict()).max(6)}).strict();
+export const emptyDraft=():DraftFields=>Object.fromEntries(draftKeys.map(k=>[k,'']))as DraftFields;
+// Without AI the text becomes the first thought, and every other part is asked for.
+export function basicDraft(i:Pick<DraftInput,'text'|'current'|'answers'>):DraftReply{
+ const f={...emptyDraft(),...i.current};
+ for(const a of i.answers||[])if(a.answer.trim())f[a.field]=a.answer.trim();
+ if(!f.body&&i.text.trim()){f.body=i.text.trim().slice(0,3000);f.title=clip(i.text,60);}
+ const ask:{field:DraftKey;question:string}[]=([['who','이 일을 겪는 사람은 누구인가요?'],['whenWhere','그 일은 언제, 무엇을 하려다 막히나요?'],['workaround','지금은 어떻게 넘기고 있나요?'],['why','그래서 무엇이 힘들거나 아쉬운가요?'],['change','이게 풀리면 무엇이 달라질까요?'],['focus','4주 동안 어디까지 해볼까요?']] as const).filter(([k])=>!f[k]).map(([field,question])=>({field,question}));
+ return {fields:f,missing:ask.slice(0,4),engine:'basic'};
+}
