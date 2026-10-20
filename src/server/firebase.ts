@@ -15,6 +15,7 @@ export async function authenticatedUid(request: Request) {
  if (!header?.startsWith('Bearer ')) return null;
  try {
   const token = await getAuth(firebaseApp()).verifyIdToken(header.slice(7), true);
-  return token.firebase.sign_in_provider === 'google.com' && token.email_verified && token.email ? { uid: token.uid, email: token.email.toLowerCase(), name: token.name || token.email.split('@')[0], avatar: token.picture || '' } : null;
+  // Google and email/password accounts; invites and roles match by email, so the address must be verified either way.
+  return ['google.com', 'password'].includes(token.firebase.sign_in_provider) && token.email_verified && token.email ? { uid: token.uid, email: token.email.toLowerCase(), name: token.name || token.email.split('@')[0], avatar: token.picture || '' } : null;
  } catch { return null; }
 }

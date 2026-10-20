@@ -10,6 +10,7 @@ import {JourneyBoard} from './journey-board';
 import {ProjectLobby} from './project-lobby';
 import {ProjectSteps,ProjectStepsEmpty,MyProjects} from './project-steps';
 import {AICoach} from './ai-coach';
+import {EmailLogin,EmailVerify} from './email-login';
 import {ExhibitionGallery} from './project-exhibit';
 import type {RecordOf} from '@/lib/workshop/model';
 import {projectIdsOf} from '@/lib/policy';
@@ -35,8 +36,8 @@ function Avatar({member,large=false}:{member?:Member;large?:boolean}){
  return <span className={'avatar '+(large?'avatar-large':'')} aria-label={(member?.name||'참가자')+'의 일러스트 아바타'}><img src={large?character.image:character.thumbnail} alt="" loading="lazy"/></span>;
 }
 function Brand(){return <div className="brand"><span className="brand-mark"><Leaf size={20}/></span>vibe<span className="brand-dot">.</span></div>;}
-function Login({loading,error,onLogin}:{loading:boolean;error:string;onLogin:()=>void}){
- return <main className="login-page"><div className="login-story"><img className="login-character" src={characterFor({id:'min'}).image} alt="보라색 재킷을 입은 메이커 캐릭터"/><Brand/><span className="eyebrow">4 WEEKS. ONE NEW POSSIBILITY.</span><h1>당신의 작은 생각이<br/>누군가의 변화를<br/><em>만들 때까지.</em></h1><p>함께 발견하고, 만들고, 연결하는<br/>우리의 바이브코딩 여정.</p><div className="login-orbit"><span>생각</span><i/><span>연결</span><i/><span>실현</span></div><small>바이브코딩 워크숍 · VibeCoding2</small></div><div className="login-card"><span className="pill">함께 시작해요</span><h2>반가워요, 메이커!</h2><p>Google 계정으로 로그인하고<br/>우리의 작업 공간에 바로 참여하세요.</p><button className="google-button" onClick={onLogin} disabled={loading||!firebaseConfigured}>{loading?<LoaderCircle className="spin" size={20}/>:<b className="google-g">G</b>}Google로 시작하기<ArrowRight size={17}/></button>{error&&<div role="alert" className="form-error">{error}</div>}<p className="login-note">처음 로그인하면 참가자로 자동 가입됩니다.<br/>접속이 어렵다면 운영자에게 알려주세요.</p><a href="/preview" className="preview-link">샘플 화면 둘러보기 <ArrowUpRight size={16}/></a><span className="login-foot">아이디어가 자라나는 곳, vibe.</span></div></main>;
+function Login({loading,error,onLogin,unverified,onVerified}:{loading:boolean;error:string;onLogin:()=>void;unverified?:User|null;onVerified?:(u:User)=>void}){
+ return <main className="login-page"><div className="login-story"><img className="login-character" src={characterFor({id:'min'}).image} alt="보라색 재킷을 입은 메이커 캐릭터"/><Brand/><span className="eyebrow">4 WEEKS. ONE NEW POSSIBILITY.</span><h1>당신의 작은 생각이<br/>누군가의 변화를<br/><em>만들 때까지.</em></h1><p>함께 발견하고, 만들고, 연결하는<br/>우리의 바이브코딩 여정.</p><div className="login-orbit"><span>생각</span><i/><span>연결</span><i/><span>실현</span></div><small>바이브코딩 워크숍 · VibeCoding2</small></div><div className="login-card">{unverified&&onVerified?<EmailVerify user={unverified} onVerified={onVerified}/>:<><span className="pill">함께 시작해요</span><h2>반가워요, 메이커!</h2><p>Google 계정이나 이메일로 로그인하고<br/>우리의 작업 공간에 바로 참여하세요.</p><button className="google-button" onClick={onLogin} disabled={loading||!firebaseConfigured}>{loading?<LoaderCircle className="spin" size={20}/>:<b className="google-g">G</b>}Google로 시작하기<ArrowRight size={17}/></button><div className="login-or"><span>또는</span></div><EmailLogin disabled={loading}/>{error&&<div role="alert" className="form-error">{error}</div>}<p className="login-note">처음 로그인하면 참가자로 자동 가입됩니다.<br/>접속이 어렵다면 운영자에게 알려주세요.</p></>}<a href="/preview" className="preview-link">샘플 화면 둘러보기 <ArrowUpRight size={16}/></a><span className="login-foot">아이디어가 자라나는 곳, vibe.</span></div></main>;
 }
 export function WorkspaceApp({preview=false}:{preview?:boolean}){
  const [data,setData]=useState<Workspace|null>(preview?previewWorkspace():null);
@@ -45,7 +46,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  const [startRequest,setStartRequest]=useState(0);
  const [memberFilter,setMemberFilter]=useState<string|null>(null);
  const [stepByProject,setStepByProject]=useState<Record<string,StepKey>>({});
- const [entered,setEntered]=useState(false);
+ const [entered,setEntered]=useState(false),[unverified,setUnverified]=useState<User|null>(null);
  const [invite,setInvite]=useState<{projectId:string;code:string}|null>(null),lobbyDefault=useRef(false);
  const [workshopTab,setWorkshopTab]=useState<{id:string;revision:number;docKey?:DocKey;target?:string}|undefined>();
  const [space,setSpace]=useState<Space>('me'),[view,setView]=useState<View>('dashboard'),[query,setQuery]=useState(''),[filter,setFilter]=useState('all');
@@ -80,17 +81,22 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
   if(preview)return;
   if(!firebaseConfigured){setLoading(false);setError('Firebase 웹 설정이 필요합니다.');return;}
   return onAuthStateChanged(clientAuth(),async current=>{
-   setUser(current);setError('');
+   setUser(current);setError('');setUnverified(null);
    if(!current){setData(null);extraPages.current=[];setPageCursors({});setLoading(false);return;}
-   setLoading(true);
-   try{
-    const result=await fetch('/api/enroll',{method:'POST',headers:{Authorization:'Bearer '+await current.getIdToken()}});
-    const value=await result.json();if(!result.ok)throw new Error(value.error);
-    await load(current);
-   }catch(e){setError(e instanceof Error?e.message:'연결을 확인해주세요.');}
-   finally{setLoading(false);}
+   // An email account opens nothing until its address is confirmed.
+   if(current.providerData.some(p=>p.providerId==='password')&&!current.emailVerified){setUnverified(current);setLoading(false);return;}
+   await enter(current);
   });
  },[preview,load]);
+ async function enter(current:User){
+  setLoading(true);setUnverified(null);
+  try{
+   const result=await fetch('/api/enroll',{method:'POST',headers:{Authorization:'Bearer '+await current.getIdToken()}});
+   const value=await result.json();if(!result.ok)throw new Error(value.error);
+   await load(current);
+  }catch(e){setError(e instanceof Error?e.message:'연결을 확인해주세요.');}
+  finally{setLoading(false);}
+ }
  useEffect(()=>{if(!user||preview)return;const timer=setInterval(()=>{if(document.visibilityState==='visible')load(user).catch(()=>{});},20000);return()=>clearInterval(timer);},[user,preview,load]);
  useEffect(()=>{if(composer&&!modalRef.current?.open)modalRef.current?.showModal();else if(!composer)modalRef.current?.close();},[composer]);
  useEffect(()=>{if(selected&&!detailRef.current?.open)detailRef.current?.showModal();else if(!selected)detailRef.current?.close();},[selected]);
@@ -127,7 +133,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  function openComposer(idea?:Idea){setEditing(idea||null);setTitle(idea?.title||'');setBody(idea?.body||'');setReason('');setKind(idea?.kind||'thought');setScope(idea?.scope||(space==='project'?'project':space==='me'?'owner':'cohort'));setComposer(true);}
  async function submitIdea(e:FormEvent){e.preventDefault();const command:Command=editing?{type:'editIdea',id:editing.id,revision:editing.revision,title,body,reason}:{type:'createIdea',title,body,kind,scope};if(await run(command))setComposer(false);}
  function navigate(next:View){if(next!=='workshop'){setWorkshopTab(undefined);const url=new URL(location.href);url.searchParams.delete('view');url.searchParams.delete('tab');url.searchParams.delete('item');history.replaceState(null,'',url);}extraPages.current=[];setPageCursors({});setView(next);setMobileNav(false);setQuery('');setMemberFilter(null);}
- if(!data)return <Login loading={loading} error={error} onLogin={login}/>;
+ if(!data)return <Login loading={loading} error={error} onLogin={login} unverified={unverified} onVerified={u=>{void enter(u);}}/>;
  const me=data.me, project=data.projects.find(p=>p.id===me.projectId);
  const findMember=(uid:string)=>data.members.find(m=>m.id===uid);
  const focused=data.ideas.find(i=>i.id===selected);

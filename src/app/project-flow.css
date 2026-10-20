@@ -191,3 +191,32 @@
 .pj-vote-open{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .pj-vote-open label{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:#4c3f5c}
 .pj-vote-open select{border:1px solid #d9cceb;border-radius:9px;padding:7px 9px;background:#fff;color:#3e3249;font-weight:700}
+
+/* Email login next to Google on the login card. */
+.login-or{display:flex;align-items:center;gap:10px;margin:14px 0 4px;color:#9a8ea8;font-size:12px}
+.login-or::before,.login-or::after{content:"";flex:1;height:1px;background:#e7ddf0}
+.email-login{display:grid;gap:10px;text-align:left}
+.email-login-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#f3ecfc;border-radius:12px;padding:4px}
+.email-login-tabs button{border-radius:9px;padding:8px;font-size:13px;font-weight:700;color:#6f6480;background:none}
+.email-login-tabs button[aria-selected=true]{background:#fff;color:#5e3f93;box-shadow:0 1px 4px #2c193f1a}
+.email-login label{display:grid;gap:5px;font-size:12px;font-weight:700;color:#4c3f5c}
+.email-login input{border:1px solid #e3d9eb;border-radius:10px;padding:11px 12px;font-size:14px;background:#fdfcfe;color:#3e3249}
+.email-button{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:0;border-radius:12px;padding:13px;background:#7854b8;color:#fff;font-weight:800;font-size:14px;cursor:pointer}
+.email-button:disabled{opacity:.6;cursor:default}
+.email-link{justify-self:center;background:none;border:0;color:#7854b8;font-size:12px;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.email-notice{font-size:12.5px;color:#2f7a52;background:#e9f7ef;border-radius:9px;padding:9px 11px;line-height:1.5}
+.email-verify{display:grid;gap:12px;justify-items:center;text-align:center;color:#3e3249}
+.email-verify>svg{color:#7854b8}
+.email-verify h2{font-size:21px}
+.email-verify p{font-size:13.5px;line-height:1.7;color:#5f5470}
+.email-verify-actions{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+.login-card .email-login label{color:#efe6fb}
+.login-card .login-or{color:#d7c8ec}
+.login-card .login-or::before,.login-card .login-or::after{background:#ffffff40}
+.login-card .email-login-tabs{background:#ffffff26}
+.login-card .email-login-tabs button{color:#efe6fb}
+.login-card .email-login-tabs button[aria-selected=true]{color:#5e3f93}
+.login-card .email-link{color:#f0d9ff}
+.login-card .email-verify,.login-card .email-verify h2{color:#fff}
+.login-card .email-verify p{color:#e9defa}
+.login-card .email-verify>svg{color:#f0d9ff}
