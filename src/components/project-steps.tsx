@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Crown, MessageCircle, Plus, Sparkles, Vote, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Crown, MessageCircle, Pencil, Plus, Sparkles, Trash2, Vote, X } from "lucide-react";
 import { IdeaRefinement } from "./idea-refinement";
 import { characterFor } from "@/lib/characters";
 import { canReadIdea } from "@/lib/policy";
@@ -59,6 +59,7 @@ export function ProjectSteps(p: StepsProps) {
   const mine = cards.filter((i) => i.ownerId === me.id);
   const [step, setStep] = useState<StepKey | null>(p.initialStep ?? null);
   const [writing, setWriting] = useState(false), [quick, setQuick] = useState(false);
+  const [editCard, setEditCard] = useState<Idea | null>(null), [editTitle, setEditTitle] = useState(""), [editBody, setEditBody] = useState("");
   const [selectedId, setSelectedId] = useState((mine.find((i) => i.state === "shared") || mine[0])?.id || "");
   const myCard = mine.find((i) => i.id === selectedId) || mine.find((i) => i.state === "shared") || mine[0];
   const [title, setTitle] = useState(""), [body, setBody] = useState("");
@@ -69,7 +70,7 @@ export function ProjectSteps(p: StepsProps) {
   useEffect(() => { if (step) onStepChange(step); }, [step, onStepChange]);
   useEffect(() => {
     if (writing && !composer.current?.open) composer.current?.showModal();
-    else if (!writing) { composer.current?.close(); setQuick(false); }
+    else if (!writing) { composer.current?.close(); setQuick(false); setEditCard(null); }
   }, [writing]);
 
   const docs = recordsOf(p, "document").filter((x) => x.projectId === team.id && !x.data.redacted && x.data.markdown.trim());
@@ -134,6 +135,17 @@ export function ProjectSteps(p: StepsProps) {
   // My own unlocked card opens the writing window with the AI coach; anyone else's opens the full card.
   const canContinue = (i: Idea) => i.ownerId === me.id && i.state === "shared" && !ended;
   function continueAt(at: StepKey, i: Idea) { setSelectedId(i.id); setStep(at); setWriting(true); }
+  // Fixing a card opens its title and story right away; deleting asks once and removes it.
+  function startEdit(i: Idea) { setEditCard(i); setEditTitle(i.title); setEditBody(i.body); setWriting(true); }
+  async function saveEdit(e: FormEvent) {
+    e.preventDefault();
+    if (editCard && (await p.saveIdea({ type: "editIdea", id: editCard.id, revision: editCard.revision, title: editTitle.trim(), body: editBody.trim(), reason: "카드 내용 고침" }))) setWriting(false);
+  }
+  const canDelete = (i: Idea) => (i.ownerId === me.id || me.role === "admin") && i.state !== "selected" && team.confirmedProblem?.ideaId !== i.id && !ended;
+  async function removeCard(i: Idea) {
+    if (!window.confirm("\"" + i.title + "\" 카드를 지울까요? 지운 카드는 되돌릴 수 없어요.")) return;
+    await p.saveIdea({ type: "deleteIdea", id: i.id, revision: i.revision });
+  }
   function openCard(i: Idea) { if (step && step !== "thought" && canContinue(i)) continueAt(step, i); else p.onIdea(i.id); }
   const castVote = (ideaId: string) => p.run({ type: "castTeamVote", projectId: team.id, ideaId });
 
@@ -225,7 +237,8 @@ export function ProjectSteps(p: StepsProps) {
                 ) : <p className="steps-muted">아직 질문에 답하지 않았어요.</p>}</>}
                 {step === "definition" && (done ? <ProblemCard value={i.refinement!} origin={i.title} compact /> : <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p><p className="steps-muted">{answered(i.refinement) === questionFields.length ? "문제 카드를 만드는 중이에요." : "2단계 경험 질문부터 답해야 해요."}</p></>)}
                 <footer>
-                  {(i.ownerId === me.id || me.role === "admin") && !ended && <button type="button" className="text-button pad-manage" onClick={(e) => { e.stopPropagation(); p.onIdea(i.id); }}>고치기·삭제</button>}
+                  {canContinue(i) && <button type="button" className="text-button pad-manage" disabled={p.busy} onClick={(e) => { e.stopPropagation(); startEdit(i); }}><Pencil size={12} /> 고치기</button>}
+                  {canDelete(i) && <button type="button" className="text-button pad-manage danger" disabled={p.busy} onClick={(e) => { e.stopPropagation(); void removeCard(i); }}><Trash2 size={12} /> 삭제</button>}
                   <em><MessageCircle size={12} /> 의견 {commentCount(i.id)}</em>
                 </footer>
               </article>
@@ -366,15 +379,25 @@ export function ProjectSteps(p: StepsProps) {
         {writing && writable && (
           <>
             <header>
-              <div><span>{quick ? "AI로 한 번에 · 1·2·3단계와 문제 카드" : "STEP " + (index + 1) + " · " + spec.name}</span><h3>{quick ? "긴 글이나 파일로 문제 카드까지 만들어요" : spec.title}</h3></div>
-              {!quick && step !== "thought" && mine.length > 1 && (
+              <div><span>{editCard ? "카드 고치기" : quick ? "AI로 한 번에 · 1·2·3단계와 문제 카드" : "STEP " + (index + 1) + " · " + spec.name}</span><h3>{editCard ? "제목과 겪은 일을 고쳐요" : quick ? "긴 글이나 파일로 문제 카드까지 만들어요" : spec.title}</h3></div>
+              {!quick && !editCard && step !== "thought" && mine.length > 1 && (
                 <select aria-label="이어 쓸 내 카드" value={myCard?.id} onChange={(e) => setSelectedId(e.target.value)} disabled={p.busy}>
                   {mine.map((i) => <option key={i.id} value={i.id}>{i.title}</option>)}
                 </select>
               )}
               <button className="icon-button" aria-label="닫기" onClick={() => setWriting(false)}><X size={20} /></button>
             </header>
-            {quick && p.makeDraft ? (
+            {editCard ? (
+              <form className="steps-form" onSubmit={saveEdit}>
+                <label>무슨 일이었나요?<input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} maxLength={120} required disabled={p.busy} /></label>
+                <label>언제, 누구에게, 무엇이 불편했나요?<textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={6} maxLength={5000} required disabled={p.busy} /></label>
+                <div className="steps-actions">
+                  {answered(editCard.refinement) > 0 && <button type="button" className="secondary-button" disabled={p.busy} onClick={() => { const i = editCard; setEditCard(null); continueAt(answered(i.refinement) === questionFields.length ? "definition" : "questions", i); }}>2·3단계 답 고치기</button>}
+                  <small>{editCard.refinement?.ready ? "제목·내용을 고치면 문제 카드는 다시 확인 상태가 돼요." : ""}</small>
+                  <button className="primary-button" disabled={p.busy || !editTitle.trim() || !editBody.trim() || (editTitle.trim() === editCard.title && editBody.trim() === editCard.body)}>고친 내용 저장</button>
+                </div>
+              </form>
+            ) : quick && p.makeDraft ? (
               <QuickDraft ask={p.makeDraft} member={me} doneLabel="새 카드로 저장하기" onDone={saveDraft} onCancel={() => setWriting(false)} authors={members.map((m) => m.name)} />
             ) : step === "thought" ? (
               <div className={p.askCoach ? "write-grid" : ""}>

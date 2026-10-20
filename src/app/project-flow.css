@@ -146,6 +146,7 @@
 .pad-owner-avatar{width:42px;height:42px;border-radius:50%;object-fit:cover;object-position:top;background:#fff;border:2px solid #fff;box-shadow:0 2px 8px #2c193f26;flex-shrink:0}
 .pj .pad-owner strong{font-size:15px;font-weight:800;color:#2c2937;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pad-manage{font-size:12px;padding:2px 0}
+.pad-manage.danger{color:#b4475c}
 .quiet-button.danger{color:#b4475c}
 .pad-by{flex-shrink:0;font-size:11px;color:#6b6478;white-space:nowrap}
 .pad-me{flex-shrink:0;font-size:12px;font-weight:900;color:#fff;background:#ff6b3d;border-radius:999px;padding:3px 10px;box-shadow:0 2px 6px #ff6b3d55}
