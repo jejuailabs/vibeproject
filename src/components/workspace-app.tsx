@@ -41,6 +41,8 @@ function Login({loading,error,onLogin,unverified,onVerified}:{loading:boolean;er
 }
 export function WorkspaceApp({preview=false}:{preview?:boolean}){
  const [data,setData]=useState<Workspace|null>(preview?previewWorkspace():null);
+ // True until the first auth check (and, when signed in, the first workspace load) settles, so a refresh never flashes the login page.
+ const [restoring,setRestoring]=useState(!preview);
  const [user,setUser]=useState<User|null>(null),[loading,setLoading]=useState(!preview),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [characterOpen,setCharacterOpen]=useState(false);
  const [startRequest,setStartRequest]=useState(0);
@@ -81,13 +83,14 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  },[]);
  useEffect(()=>{
   if(preview)return;
-  if(!firebaseConfigured){setLoading(false);setError('Firebase 웹 설정이 필요합니다.');return;}
+  if(!firebaseConfigured){setLoading(false);setRestoring(false);setError('Firebase 웹 설정이 필요합니다.');return;}
   return onAuthStateChanged(clientAuth(),async current=>{
    setUser(current);setError('');setUnverified(null);
-   if(!current){setData(null);extraPages.current=[];setPageCursors({});setLoading(false);return;}
+   if(!current){setData(null);extraPages.current=[];setPageCursors({});setLoading(false);setRestoring(false);return;}
    // An email account opens nothing until its address is confirmed.
-   if(current.providerData.some(p=>p.providerId==='password')&&!current.emailVerified){setUnverified(current);setLoading(false);return;}
+   if(current.providerData.some(p=>p.providerId==='password')&&!current.emailVerified){setUnverified(current);setLoading(false);setRestoring(false);return;}
    await enter(current);
+   setRestoring(false);
   });
  },[preview,load]);
  async function enter(current:User){
@@ -136,6 +139,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  function openComposer(idea?:Idea){setEditing(idea||null);setTitle(idea?.title||'');setBody(idea?.body||'');setReason('');setKind(idea?.kind||'thought');setScope(idea?.scope||(space==='project'?'project':space==='me'?'owner':'cohort'));setComposer(true);}
  async function submitIdea(e:FormEvent){e.preventDefault();const command:Command=editing?{type:'editIdea',id:editing.id,revision:editing.revision,title,body,reason}:{type:'createIdea',title,body,kind,scope};if(await run(command))setComposer(false);}
  function navigate(next:View){if(next!=='workshop'){setWorkshopTab(undefined);const url=new URL(location.href);url.searchParams.delete('view');url.searchParams.delete('tab');url.searchParams.delete('item');history.replaceState(null,'',url);}extraPages.current=[];setPageCursors({});setView(next);setMobileNav(false);setQuery('');setMemberFilter(null);}
+ if(!data&&restoring)return <main className="boot-screen" aria-busy="true"><LoaderCircle className="spin" size={30}/><span className="sr-only">불러오는 중</span></main>;
  if(!data)return <Login loading={loading} error={error} onLogin={login} unverified={unverified} onVerified={u=>{void enter(u);}}/>;
  const me=data.me, project=data.projects.find(p=>p.id===me.projectId);
  const findMember=(uid:string)=>data.members.find(m=>m.id===uid);
