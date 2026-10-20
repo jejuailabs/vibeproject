@@ -65,6 +65,12 @@ async function storeSecret(c: Context, projectId: string, password: string) {
     iterations: ITERATIONS,
   } satisfies Secret);
 }
+/** The team's finished problem cards that can be voted on, including the card the project started from. */
+async function voteCards(c: Context, p: Project) {
+  const listed = await c.store.list<Idea>(path(c, "ideas"), [{ field: "projectId", value: p.id }]);
+  if (p.sourceIdeaId && !listed.some((i) => i.id === p.sourceIdeaId)) listed.push(await idea(c, p.sourceIdeaId));
+  return listed.filter((i) => i.refinement?.ready && i.state !== "closed_unselected");
+}
 function addMember(c: Context, p: Project, role: "leader" | "member") {
   saveProject(c, { ...p, memberIds: [...new Set([...p.memberIds, c.uid])] });
   joinMembership(c, c.me, p.id);
@@ -201,9 +207,7 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
     }
     case "openTeamVote": {
       const p = await project(c, cmd.projectId, "leader");
-      const listed = await c.store.list<Idea>(path(c, "ideas"), [{ field: "projectId", value: p.id }]);
-      if (p.sourceIdeaId && !listed.some((i) => i.id === p.sourceIdeaId)) listed.push(await idea(c, p.sourceIdeaId));
-      const ideas = listed.filter((i) => i.refinement?.ready && i.state !== "closed_unselected");
+      const ideas = await voteCards(c, p);
       if (ideas.length < 1) fail("완성된 문제 카드가 있어야 투표를 열 수 있습니다.");
       const old = await optional(c, "teamvote-" + p.id, "teamVote");
       if (old?.data.state === "open") fail("이미 투표가 열려 있습니다.");
@@ -233,6 +237,26 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       const voters = vote.data.voters + (!before.length && picks.length ? 1 : before.length && !picks.length ? -1 : 0);
       write(c, ballotId, "teamBallot", { round: vote.data.round, ideaIds: picks }, "project", p.id, c.uid, prior);
       write(c, vote.id, "teamVote", { ...vote.data, counts, voters }, "project", p.id, vote.ownerId, vote);
+      return { id: p.id };
+    }
+    case "refreshTeamVote": {
+      // Cards finished after the vote opened join it; votes already cast stay.
+      const p = await project(c, cmd.projectId, "leader");
+      const vote = await optional(c, "teamvote-" + p.id, "teamVote");
+      if (vote?.data.state !== "open") fail("열려 있는 투표가 없습니다.");
+      const added = (await voteCards(c, p)).map((i) => i.id).filter((id) => !vote.data.candidateIds.includes(id));
+      if (!added.length) fail("새로 추가할 완성된 문제 카드가 없습니다.");
+      write(c, vote.id, "teamVote", { ...vote.data, candidateIds: [...vote.data.candidateIds, ...added] }, "project", p.id, vote.ownerId, vote);
+      event(c, "투표 후보 추가", "문제 카드 " + added.length + "개", p.id, p.id);
+      return { id: p.id };
+    }
+    case "cancelTeamVote": {
+      // Throws the open vote away without a result; a new vote starts a new round, so old ballots no longer count.
+      const p = await project(c, cmd.projectId, "leader");
+      const vote = await optional(c, "teamvote-" + p.id, "teamVote");
+      if (vote?.data.state !== "open") fail("열려 있는 투표가 없습니다.");
+      write(c, vote.id, "teamVote", { ...vote.data, state: "cancelled", counts: {}, voters: 0, closedAt: c.now }, "project", p.id, vote.ownerId, vote);
+      event(c, "투표 취소", vote.data.voters + "명 참여 중 취소", p.id, p.id);
       return { id: p.id };
     }
     case "closeTeamVote": {

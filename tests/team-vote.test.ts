@@ -56,3 +56,29 @@ test('the leader sets how many cards each member may vote for',async()=>{
  s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',maxVotes:9});
  assert.equal(vote(s)!.data.maxVotes,3);
 });
+
+test('the leader adds cards finished after the vote opened, and can cancel the vote to start over',async()=>{
+ const w=previewWorkspace();
+ const make=(id:string,owner:string)=>{const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project'});return c;};
+ w.ideas.push(make('b1','seo'));
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'b1'});
+ await assert.rejects(run(s,'jun',{type:'refreshTeamVote',projectId:'p-onboarding'}),/새로 추가할/);
+ // A card finished after opening joins the vote; the vote already cast stays.
+ s.workspace.ideas.push(make('b2','jun'));
+ await assert.rejects(run(s,'seo',{type:'refreshTeamVote',projectId:'p-onboarding'}),/팀장/);
+ s=await run(s,'jun',{type:'refreshTeamVote',projectId:'p-onboarding'});
+ assert.deepEqual(vote(s)!.data.candidateIds,['b1','b2']);assert.equal(vote(s)!.data.counts.b1,1);
+ s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'b2'});
+ // Cancelling throws the votes away; the next vote is a new round.
+ await assert.rejects(run(s,'seo',{type:'cancelTeamVote',projectId:'p-onboarding'}),/팀장/);
+ s=await run(s,'jun',{type:'cancelTeamVote',projectId:'p-onboarding'});
+ assert.equal(vote(s)!.data.state,'cancelled');assert.equal(vote(s)!.data.voters,0);
+ await assert.rejects(run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'b1'}),/열려 있는 투표/);
+ const round=vote(s)!.data.round;
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ assert.equal(vote(s)!.data.round,round+1);assert.equal(vote(s)!.data.voters,0);
+ s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'b1'});
+ assert.equal(vote(s)!.data.counts.b1,1);assert.equal(vote(s)!.data.voters,1);
+});
