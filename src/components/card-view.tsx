@@ -11,7 +11,8 @@ const sentenceReady = (r: Refinement) => sentenceFields.every(([k]) => r.definit
  * The finished problem card as it is exhibited and voted on: the one-sentence problem first, then the same
  * problem laid out piece by piece from the writer's answers, so a reader understands it at a glance.
  */
-export function ProblemCard({ value, member, mine, origin, compact, badge, author }: { value: Refinement; member?: Member; mine?: boolean; origin?: string; compact?: boolean; badge?: ReactNode; author?: string }) {
+/** `summary` shows only the one-sentence problem, for boards where every card keeps the same height until opened. */
+export function ProblemCard({ value, member, mine, origin, compact, badge, author, summary }: { value: Refinement; member?: Member; mine?: boolean; origin?: string; compact?: boolean; badge?: ReactNode; author?: string; summary?: boolean }) {
   const d = value.definition, a = value.answers;
   const rows: { icon: ReactNode; label: string; text: string; group: "problem" | "why" | "try" }[] = [
     { icon: <UserRound size={14} />, label: "누가 겪나요", text: d.who, group: "problem" },
@@ -25,14 +26,14 @@ export function ProblemCard({ value, member, mine, origin, compact, badge, autho
   ];
   const groups = [["problem", "문제를 나눠 보면"], ["why", "왜 풀어야 하나요"], ["try", "이번에 해볼 것"]] as const;
   return (
-    <article className={"problem-card" + (compact ? " compact" : "") + (mine ? " mine" : "")}>
+    <article className={"problem-card" + (compact ? " compact" : "") + (summary ? " summary" : "") + (mine ? " mine" : "")}>
       <header>
         <span className="problem-card-kicker"><Lightbulb size={13} /> 문제 카드{value.draft ? ` · 초안 ${value.draft}` : ""}</span>
         {badge}
         {(member || author) && <span className="problem-card-author"><img src={characterFor(member).image} alt="" />{author || member!.name}{mine && <b>나</b>}</span>}
       </header>
       <blockquote>{statement(value)}</blockquote>
-      {groups.map(([g, title]) => {
+      {!summary && groups.map(([g, title]) => {
         const list = rows.filter((r) => r.group === g && r.text.trim());
         return list.length ? (
           <section key={g} className={"problem-card-group " + g}>
@@ -41,7 +42,7 @@ export function ProblemCard({ value, member, mine, origin, compact, badge, autho
           </section>
         ) : null;
       })}
-      {origin && <footer>출발한 생각 · {origin}</footer>}
+      {origin && !summary && <footer>출발한 생각 · {origin}</footer>}
     </article>
   );
 }

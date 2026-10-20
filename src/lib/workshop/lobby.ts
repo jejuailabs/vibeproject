@@ -259,6 +259,15 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       event(c, "투표 취소", vote.data.voters + "명 참여 중 취소", p.id, p.id);
       return { id: p.id };
     }
+    case "deleteTeamVote": {
+      // Removes the vote from the team's view. The round number is kept so old ballots never count in a later vote.
+      const p = await project(c, cmd.projectId, "leader");
+      const vote = await optional(c, "teamvote-" + p.id, "teamVote");
+      if (!vote || vote.data.state === "deleted") fail("지울 투표가 없습니다.");
+      write(c, vote.id, "teamVote", { ...vote.data, state: "deleted", candidateIds: [], counts: {}, voters: 0, closedAt: vote.data.closedAt || c.now }, "project", p.id, vote.ownerId, vote);
+      event(c, "투표 삭제", vote.data.round + "번째 투표", p.id, p.id);
+      return { id: p.id };
+    }
     case "closeTeamVote": {
       const p = await project(c, cmd.projectId, "leader");
       const vote = await optional(c, "teamvote-" + p.id, "teamVote");

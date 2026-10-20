@@ -147,6 +147,7 @@ export const workshopCommand = z.discriminatedUnion("type", [
   S({ type: z.literal("closeTeamVote"), ...project }),
   S({ type: z.literal("refreshTeamVote"), ...project }),
   S({ type: z.literal("cancelTeamVote"), ...project }),
+  S({ type: z.literal("deleteTeamVote"), ...project }),
   S({
     type: z.literal("projectAccess"),
     ...project,

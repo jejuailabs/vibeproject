@@ -82,3 +82,21 @@ test('the leader adds cards finished after the vote opened, and can cancel the v
  s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'b1'});
  assert.equal(vote(s)!.data.counts.b1,1);assert.equal(vote(s)!.data.voters,1);
 });
+
+test('the leader deletes a vote; its old ballots never count in the next one',async()=>{
+ const w=previewWorkspace();
+ const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id:'d1',ownerId:'seo',projectId:'p-onboarding',scope:'project'});w.ideas.push(c);
+ let s:State={workspace:w,records:[]};
+ await assert.rejects(run(s,'jun',{type:'deleteTeamVote',projectId:'p-onboarding'}),/지울 투표/);
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'d1'});
+ await assert.rejects(run(s,'seo',{type:'deleteTeamVote',projectId:'p-onboarding'}),/팀장/);
+ s=await run(s,'jun',{type:'deleteTeamVote',projectId:'p-onboarding'});
+ assert.equal(vote(s)!.data.state,'deleted');assert.deepEqual(vote(s)!.data.candidateIds,[]);
+ await assert.rejects(run(s,'jun',{type:'deleteTeamVote',projectId:'p-onboarding'}),/지울 투표/);
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ assert.equal(vote(s)!.data.round,2);
+ // seo's ballot was for round 1, so voting again adds a vote instead of taking one back.
+ s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'d1'});
+ assert.equal(vote(s)!.data.counts.d1,1);assert.equal(vote(s)!.data.voters,1);
+});
