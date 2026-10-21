@@ -368,6 +368,7 @@ export function ProjectSteps(p: StepsProps) {
                       {i.authorName && <small>정리 {owner?.name || "팀원"}</small>}
                       {chosen ? <span className="tile-flag chosen"><Crown size={12} /> 확정</span> : mineVote ? <span className="tile-flag"><Check size={12} /> 내 선택</span> : vote?.data.state === "closed" ? <span className="tile-flag count">{vote.data.counts[i.id] || 0}표</span> : null}
                     </header>
+                    <h3 className="tile-title">{i.title}</h3>
                     <p className="tile-sentence">{statement(i.refinement!)}</p>
                     <footer onClick={(e) => e.stopPropagation()}>
                       <span className="tile-comments"><MessageCircle size={13} /> {commentCount(i.id)}</span>
