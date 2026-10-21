@@ -304,7 +304,8 @@
 .tile-act .primary-button,.tile-act .secondary-button{padding:9px 16px;font-size:13px;border-radius:20px}
 .vote-btn{border-color:#cdb9ea;color:#5d3c97;font-weight:700}
 .tile-act .pad-pick{font-size:12px}
-.vote-detail{width:min(780px,calc(100vw - 32px));padding:24px 26px}
+.modal.vote-detail{width:min(780px,calc(100vw - 32px));padding:24px 26px;background:#fff;color:#2f2840;border:0}
+.vote-detail .pad-owner strong{color:#2f2840}
 .vote-detail-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .vote-detail-actions{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap}
 .vote-detail-actions .primary-button,.vote-detail-actions .secondary-button{padding:11px 18px;font-size:14px;border-radius:22px}
