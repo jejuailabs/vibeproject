@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronDown, ChevronUp, Crown, MessageCircle, Pencil, Plus, Sparkles, Trash2, Vote, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronDown, Crown, MessageCircle, Pencil, Plus, Sparkles, Trash2, Vote, X } from "lucide-react";
 import { IdeaRefinement } from "./idea-refinement";
 import { characterFor } from "@/lib/characters";
 import { canReadIdea } from "@/lib/policy";
@@ -27,6 +27,7 @@ const steps: { key: StepKey; name: string; title: string; hint: string; group: "
 ];
 const writeSteps: StepKey[] = ["thought", "questions", "definition"];
 const tones = ["#fff4c7", "#e3f1ff", "#ffe4ec", "#e4f7ea", "#efe7fb", "#ffeedd"];
+const accents = ["#f2b134", "#5b9be6", "#e9708f", "#4fb37c", "#9773cc", "#f08a4b"];
 type StepsProps = Props & {
   project: Project;
   saveIdea: (c: Command, onResult?: (result: { id?: string }) => void) => Promise<boolean>;
@@ -83,9 +84,9 @@ export function ProjectSteps(p: StepsProps) {
   // A deleted vote keeps its record (and round) on the server but is gone for the team.
   const voteRecord = recordsOf(p, "teamVote").find((x) => x.projectId === team.id);
   const vote = voteRecord?.data.state === "deleted" ? undefined : voteRecord;
-  const [voteBoard, setVoteBoard] = useState(false), [opened, setOpened] = useState<Set<string>>(new Set());
+  const [voteBoard, setVoteBoard] = useState(false);
   useEffect(() => { if (step !== "confirm") setVoteBoard(false); }, [step]);
-  const toggleCard = (id: string) => setOpened((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+
   const myBallot = recordsOf(p, "teamBallot").find((x) => x.projectId === team.id && x.ownerId === me.id && x.data.round === vote?.data.round);
   const myPicks = myBallot ? myBallot.data.ideaIds ?? (myBallot.data.ideaId ? [myBallot.data.ideaId] : []) : [];
   const maxVotes = vote?.data.maxVotes || 1;
@@ -155,6 +156,19 @@ export function ProjectSteps(p: StepsProps) {
   }
   function openCard(i: Idea) { if (step && step !== "thought" && canContinue(i)) continueAt(step, i); else p.onIdea(i.id); }
   const castVote = (ideaId: string) => p.run({ type: "castTeamVote", projectId: team.id, ideaId });
+  // Step 4 board: tapping a card opens all of it in a popup; the vote button is on the card and in the popup.
+  const [detailId, setDetailId] = useState<string | null>(null), detailRef = useRef<HTMLDialogElement>(null);
+  const detail = detailId ? cards.find((i) => i.id === detailId && i.refinement?.ready) : undefined;
+  useEffect(() => { const d = detailRef.current; if (!d) return; if (detail && !d.open) d.showModal(); else if (!detail && d.open) d.close(); }, [detail]);
+  function cardAction(i: Idea) {
+    if (ended) return null;
+    if (vote?.data.state === "open" && vote.data.candidateIds.includes(i.id)) {
+      const mineVote = myPicks.includes(i.id), full = !mineVote && maxVotes > 1 && myPicks.length >= maxVotes;
+      return <button type="button" className={mineVote ? "primary-button" : "secondary-button vote-btn"} disabled={p.busy || full} title={full ? "고른 카드 하나를 먼저 취소해주세요." : undefined} onClick={(e) => { e.stopPropagation(); castVote(i.id); }}>{mineVote ? <><Check size={14} /> 내 선택 · 취소</> : full ? "표를 다 썼어요" : <><Vote size={14} /> 투표</>}</button>;
+    }
+    if (leader && vote?.data.state !== "open") return <label className="pad-pick" onClick={(e) => e.stopPropagation()}><input type="radio" name="problem" checked={pick === i.id} onChange={() => setPick(i.id)} /> 확정 후보</label>;
+    return null;
+  }
 
   if (history !== null)
     return (
@@ -343,28 +357,43 @@ export function ProjectSteps(p: StepsProps) {
             )}
           </div>
           <form onSubmit={confirm}>
-            <div className="pad-board vote-grid">
+            <div className="vote-tiles">
               {problems.map((i, n) => {
-                const owner = w.members.find((m) => m.id === i.ownerId), chosen = team.confirmedProblem?.ideaId === i.id;
-                const open = vote?.data.state === "open" && vote.data.candidateIds.includes(i.id), mineVote = myPicks.includes(i.id), full = !mineVote && maxVotes > 1 && myPicks.length >= maxVotes;
-                const count = vote?.data.counts[i.id] || 0;
+                const owner = w.members.find((m) => m.id === i.ownerId), chosen = team.confirmedProblem?.ideaId === i.id, mineVote = myPicks.includes(i.id);
                 return (
-                  <article key={i.id} className={"pad-card" + (pick === i.id ? " picked" : "") + (chosen ? " chosen" : "") + (i.ownerId === me.id ? " mine" : "")} style={{ background: tones[n % tones.length] }}>
-                    <Owner member={owner} mine={i.ownerId === me.id} author={i.authorName} />
-                    {chosen && <span className="pad-badge"><Crown size={12} /> 확정</span>}
-                    <ProblemCard value={i.refinement!} origin={i.title} compact summary={!opened.has(i.id)} badge={vote?.data.state === "closed" ? <span className="pad-count">{count}표</span> : undefined} />
-                    <button type="button" className="pad-more" aria-expanded={opened.has(i.id)} onClick={() => toggleCard(i.id)}>{opened.has(i.id) ? <>접기 <ChevronUp size={14} /></> : <>전체 내용 펼치기 <ChevronDown size={14} /></>}</button>
-                    <div className="pad-actions">
-                      <button type="button" className="text-button" onClick={() => p.onIdea(i.id)}>전체 보기</button>
-                      {open && !ended && <button type="button" className={mineVote ? "primary-button" : "secondary-button"} disabled={p.busy || full} title={full ? "고른 카드 하나를 먼저 취소해주세요." : undefined} onClick={() => castVote(i.id)}>{mineVote ? <><Check size={14} /> 내 선택 · 취소</> : full ? "투표 수를 다 썼어요" : "이 문제에 투표"}</button>}
-                      {leader && !ended && vote?.data.state !== "open" && <label className="pad-pick"><input type="radio" name="problem" checked={pick === i.id} onChange={() => setPick(i.id)} /> 확정 후보</label>}
-                    </div>
-                    <footer><em><MessageCircle size={12} /> 의견 {commentCount(i.id)}</em></footer>
+                  <article key={i.id} className={"vote-tile" + (mineVote ? " voted" : "") + (pick === i.id ? " picked" : "") + (chosen ? " chosen" : "")} style={{ ["--accent" as string]: accents[n % accents.length] }} role="button" tabIndex={0} aria-label={(i.authorName || owner?.name || "팀원") + "의 문제 카드 자세히 보기"} onClick={() => setDetailId(i.id)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setDetailId(i.id); } }}>
+                    <header>
+                      <img src={characterFor(owner).image} alt="" />
+                      <strong>{i.authorName || owner?.name || "팀원"}</strong>
+                      {i.authorName && <small>정리 {owner?.name || "팀원"}</small>}
+                      {chosen ? <span className="tile-flag chosen"><Crown size={12} /> 확정</span> : mineVote ? <span className="tile-flag"><Check size={12} /> 내 선택</span> : vote?.data.state === "closed" ? <span className="tile-flag count">{vote.data.counts[i.id] || 0}표</span> : null}
+                    </header>
+                    <p className="tile-sentence">{statement(i.refinement!)}</p>
+                    <footer onClick={(e) => e.stopPropagation()}>
+                      <span className="tile-comments"><MessageCircle size={13} /> {commentCount(i.id)}</span>
+                      <button type="button" className="tile-more" aria-label="자세히 보기" onClick={() => setDetailId(i.id)}><ChevronDown size={18} /></button>
+                      <span className="tile-act">{cardAction(i)}</span>
+                    </footer>
                   </article>
                 );
               })}
               {!problems.length && <div className="steps-empty"><p>아직 완성된 문제 카드가 없어요.</p><button type="button" className="primary-button" onClick={() => setStep("definition")}>문제 카드 만들러 가기 <ArrowRight size={15} /></button></div>}
             </div>
+            <dialog ref={detailRef} className="modal vote-detail" onCancel={() => setDetailId(null)} onClick={(e) => { if (e.target === e.currentTarget) setDetailId(null); }}>
+              {detail && (
+                <>
+                  <div className="vote-detail-head">
+                    <Owner member={w.members.find((m) => m.id === detail.ownerId)} mine={detail.ownerId === me.id} author={detail.authorName} />
+                    <button type="button" className="icon-button" aria-label="닫기" onClick={() => setDetailId(null)}><X size={20} /></button>
+                  </div>
+                  <ProblemCard value={detail.refinement!} origin={detail.title} badge={vote?.data.state === "closed" ? <span className="pad-count">{vote.data.counts[detail.id] || 0}표</span> : undefined} />
+                  <div className="vote-detail-actions">
+                    <button type="button" className="secondary-button" onClick={() => { setDetailId(null); p.onIdea(detail.id); }}><MessageCircle size={14} /> 의견 {commentCount(detail.id)} · 남기기</button>
+                    {cardAction(detail)}
+                  </div>
+                </>
+              )}
+            </dialog>
             {leader && !ended && problems.length > 0 && vote?.data.state !== "open" && (
               <div className="steps-confirm-bar">
                 <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} placeholder="이 문제를 고른 이유" aria-label="확정 이유" />
