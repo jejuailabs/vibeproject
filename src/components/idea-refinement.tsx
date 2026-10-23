@@ -48,7 +48,7 @@ export function IdeaRefinement({idea,editable,hasProject,busy,error,run,activePa
   }catch(e){setCardNote(e instanceof Error?e.message:'문제 카드를 만들지 못했어요.');}
   finally{setMaking(false);}
  }
- if(!editable)return <section className="refinement-read"><span className="refinement-badge">{refinementLabel(idea)}</span>{idea.refinement?<RefinementView value={idea.refinement}/>:<p>작성자가 질문에 답하면서 문제를 구체화하고 있어요. 아래 의견으로 경험과 질문을 보태주세요.</p>}</section>;
+ if(!editable)return <section className="refinement-read"><span className="refinement-badge">{refinementLabel(idea)}</span>{idea.refinement?<RefinementView value={idea.refinement} origin={idea.title} member={owner} author={idea.authorName}/>:<p>작성자가 질문에 답하면서 문제를 구체화하고 있어요. 아래 의견으로 경험과 질문을 보태주세요.</p>}</section>;
  const fields=panel==='questions'?questionFields:definitionFields;
  // What the earlier steps said: shown above the form and handed to the coach so it continues from there.
  const NL=String.fromCharCode(10);

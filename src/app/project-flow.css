@@ -183,6 +183,8 @@
 .problem-card-group.try dt,.problem-card-group.try dt svg{color:#2f7a52}
 .problem-card-group.try dt svg{background:#d9f2e4}
 .problem-card>footer{font-size:12px;color:#8e869a;border-top:1px dashed #e7ddf0;padding-top:10px}
+.problem-card-actions{display:flex;justify-content:flex-end}
+.problem-card-actions .secondary-button{display:inline-flex;align-items:center;gap:6px;color:#5d3c97;background:#fff;border-color:#d9cceb;font-size:12px;padding:8px 12px}
 .problem-card.compact{padding:14px 14px 12px;gap:10px;box-shadow:0 4px 14px #2c193f1a}
 .problem-card.compact>blockquote{font-size:14.5px;padding:11px 12px 11px 36px}
 .problem-card.compact>blockquote::before{font-size:34px;left:9px}

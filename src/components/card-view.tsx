@@ -1,8 +1,8 @@
 "use client";
-import { AlertCircle, Clock3, Eye, HeartCrack, Lightbulb, RotateCcw, Search, Sparkles, Target, UserRound } from "lucide-react";
+import { AlertCircle, Clock3, Download, Eye, HeartCrack, Lightbulb, RotateCcw, Search, Sparkles, Target, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { characterFor } from "@/lib/characters";
-import { definitionFields, questionFields, sentenceFields, statement, type Refinement } from "@/lib/refinement";
+import { definitionFields, problemCardMarkdown, questionFields, sentenceFields, statement, type Refinement } from "@/lib/refinement";
 import type { Member } from "@/lib/types";
 
 const sentenceReady = (r: Refinement) => sentenceFields.every(([k]) => r.definition[k].trim());
@@ -14,6 +14,15 @@ const sentenceReady = (r: Refinement) => sentenceFields.every(([k]) => r.definit
 /** `summary` shows only the one-sentence problem, for boards where every card keeps the same height until opened. */
 export function ProblemCard({ value, member, mine, origin, compact, badge, author, summary }: { value: Refinement; member?: Member; mine?: boolean; origin?: string; compact?: boolean; badge?: ReactNode; author?: string; summary?: boolean }) {
   const d = value.definition, a = value.answers;
+  function downloadMarkdown() {
+    const title = origin?.trim() || "문제 카드";
+    const filename = title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").slice(0, 100).replace(/[. ]+$/, "") || "문제 카드";
+    const url = URL.createObjectURL(new Blob([problemCardMarkdown(value, title, author || member?.name)], { type: "text/markdown;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = filename + ".md";
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   const rows: { icon: ReactNode; label: string; text: string; group: "problem" | "why" | "try" }[] = [
     { icon: <UserRound size={14} />, label: "누가 겪나요", text: d.who, group: "problem" },
     { icon: <Clock3 size={14} />, label: "언제, 어떤 상황에서", text: d.situation, group: "problem" },
@@ -43,6 +52,7 @@ export function ProblemCard({ value, member, mine, origin, compact, badge, autho
         ) : null;
       })}
       {origin && !summary && <footer>출발한 생각 · {origin}</footer>}
+      {value.ready && <div className="problem-card-actions"><button type="button" className="secondary-button" onKeyDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); downloadMarkdown(); }}><Download size={15} /> MD 다운로드</button></div>}
     </article>
   );
 }
@@ -73,12 +83,12 @@ export function CardPreview({ phase, member, title, body, refinement }: { phase:
 }
 
 /** Everything written on a card, laid out by step, for reading in full. */
-export function RefinementView({ value }: { value?: Refinement }) {
+export function RefinementView({ value, origin, member, author }: { value?: Refinement; origin?: string; member?: Member; author?: string }) {
   if (!value) return <p className="card-full-empty">아직 경험 질문에 답하지 않았어요.</p>;
   const asked = questionFields.filter(([k]) => value.answers[k].trim());
   return (
     <div className="card-full">
-      {value.draft > 0 && sentenceReady(value) && <ProblemCard value={value} />}
+      {value.draft > 0 && sentenceReady(value) && <ProblemCard value={value} origin={origin} member={member} author={author} />}
       <section>
         <h4>02 · 경험 구체화 <small>{asked.length}/{questionFields.length}</small></h4>
         <dl>{questionFields.map(([k, label]) => <div key={k}><dt>{label}</dt><dd className={value.answers[k].trim() ? "" : "empty"}>{value.answers[k].trim() || "아직 작성하지 않음"}</dd></div>)}</dl>

@@ -49,6 +49,16 @@ export function refinementText(r?:Refinement){if(!r)return '';return [
  ...(r.draft?['문제 카드 초안 '+r.draft+' · '+(r.ready?'완성':'작성 중'),...definitionFields.map(([k,label])=>label+NL+(r.definition[k]||'아직 작성하지 않음')),'문제 한 문장'+NL+statement(r)]:[]),
 ].join(NL+NL);}
 const or=(v:string|undefined)=>v?.trim()||'확인 필요';
+/** Export the completed card, including its experience answers, without creating a project document. */
+export function problemCardMarkdown(r:Refinement,title='문제 카드',author?:string){
+ const section=(label:string,text:string)=>['### '+label,'',text.trim()||'아직 작성하지 않음',''];
+ return ['# '+title.replace(/[\r\n]+/g,' ').trim(),'','문제 카드 · 초안 '+r.draft,...(author?['작성자: '+author]:[]),'',
+  '## 문제 한 문장','',...statement(r).split(/\r?\n/).map(line=>'> '+line),'',
+  '## 경험 구체화','',...questionFields.flatMap(([k,label])=>section(label,r.answers[k])),
+  '## 문제를 나눠 보면','',...sentenceFields.flatMap(([k,label])=>section(label,r.definition[k])),
+  '## 왜 풀어야 하나요','',...definitionFields.flatMap(([k,label])=>section(label,r.definition[k])),
+ ].join(NL);
+}
 /** The confirmed problem card written as the project's first planning document (docs/product.md). */
 export function problemMarkdown(i:Idea){
  const r=i.refinement||emptyRefinement(),d=r.definition,a=r.answers;

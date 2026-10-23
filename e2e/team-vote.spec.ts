@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 async function addProblem(page: Page, title: string) {
   await page.getByRole('navigation', { name: '단계 이동' }).getByRole('button', { name: /각자 생각/ }).click();
@@ -82,4 +83,32 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   await expect(page.getByRole('button', { name: '새 투표 열기', exact: true })).toBeEnabled();
   await page.screenshot({ path: 'work/team-vote-rooms-mobile.png', fullPage: true });
+});
+
+test('a completed card downloads its Korean contents as Markdown without opening the editor', async ({ page }) => {
+  await page.goto('/preview');
+  await page.getByLabel('미리보기 참가자').selectOption('jun');
+  await page.getByRole('button', { name: '대시보드', exact: true }).click();
+  await page.getByRole('button', { name: '채팅 닫기', exact: true }).click();
+  await page.locator('.pj-open').filter({ hasText: '첫걸음' }).click();
+  await page.getByRole('button', { name: /각자 생각/ }).click();
+  await addProblem(page, '완성 카드: 모임/안내');
+  const card = page.locator('.pad-card').filter({ hasText: '완성 카드: 모임/안내' });
+  const downloadPromise = page.waitForEvent('download');
+  await card.getByRole('button', { name: 'MD 다운로드', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('완성 카드_ 모임_안내.md');
+  const content = await readFile((await download.path())!, 'utf8');
+  expect(content).toContain('# 완성 카드: 모임/안내');
+  expect(content).toContain('## 문제 한 문장');
+  expect(content).toContain('## 경험 구체화');
+  expect(content).toContain('## 문제를 나눠 보면');
+  expect(content).toContain('4주 동안 어디까지 해볼까요?');
+  expect(content).toContain('처음 온 사람이 모임 시작 전 대화 상대를 찾지 못해 혼자 기다립니다.');
+  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(card.getByRole('button', { name: 'MD 다운로드', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await card.screenshot({ path: 'work/card-markdown-download.png' });
 });
