@@ -85,7 +85,8 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await page.screenshot({ path: 'work/team-vote-rooms-mobile.png', fullPage: true });
 });
 
-test('a completed card downloads its Korean contents as Markdown without opening the editor', async ({ page }) => {
+test('a completed card previews plain text, copies it and downloads Markdown in its own dialog', async ({ page }) => {
+  test.setTimeout(60000);
   await page.goto('/preview');
   await page.getByLabel('미리보기 참가자').selectOption('jun');
   await page.getByRole('button', { name: '대시보드', exact: true }).click();
@@ -94,9 +95,29 @@ test('a completed card downloads its Korean contents as Markdown without opening
   await page.getByRole('button', { name: /각자 생각/ }).click();
   await addProblem(page, '완성 카드: 모임/안내');
   const card = page.locator('.pad-card').filter({ hasText: '완성 카드: 모임/안내' });
-  const downloadPromise = page.waitForEvent('download');
-  await card.getByRole('button', { name: 'MD 다운로드', exact: true }).focus();
+  await expect(card.getByRole('button', { name: 'MD 다운로드', exact: true })).toHaveCount(0);
+  await card.getByRole('button', { name: '텍스트로 한꺼번에', exact: true }).focus();
   await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: '카드 전체 텍스트', exact: true });
+  const text = dialog.getByRole('textbox', { name: '정리된 카드 텍스트', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('.pad-composer')).not.toBeVisible();
+  await expect(text).toHaveAttribute('readonly', '');
+  const plainText = await text.inputValue();
+  expect(plainText).toMatch(/^완성 카드: 모임\/안내\n/);
+  expect(plainText).toContain('문제 한 문장');
+  expect(plainText).not.toMatch(/^#{1,3} /m);
+  // Keep the user's system clipboard untouched while checking the exact copied contents.
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async (value: string) => { (window as unknown as { copiedCardText: string }).copiedCardText = value; },
+    } });
+  });
+  await dialog.getByRole('button', { name: '텍스트 복사', exact: true }).click();
+  await expect(dialog.getByRole('status')).toHaveText('텍스트를 복사했어요.');
+  expect(await page.evaluate(() => (window as unknown as { copiedCardText: string }).copiedCardText)).toBe(plainText);
+  const downloadPromise = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'MD 다운로드', exact: true }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('완성 카드_ 모임_안내.md');
   const content = await readFile((await download.path())!, 'utf8');
@@ -106,9 +127,33 @@ test('a completed card downloads its Korean contents as Markdown without opening
   expect(content).toContain('## 문제를 나눠 보면');
   expect(content).toContain('4주 동안 어디까지 해볼까요?');
   expect(content).toContain('처음 온 사람이 모임 시작 전 대화 상대를 찾지 못해 혼자 기다립니다.');
-  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(dialog).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(card.getByRole('button', { name: 'MD 다운로드', exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '텍스트 복사', exact: true })).toBeInViewport();
+  await expect(dialog.getByRole('button', { name: 'MD 다운로드', exact: true })).toBeInViewport();
+  expect(await dialog.evaluate(e => e.scrollWidth > e.clientWidth)).toBe(false);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
-  await card.screenshot({ path: 'work/card-markdown-download.png' });
+  await dialog.screenshot({ path: 'work/card-text-preview-mobile.png' });
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator('.pad-composer')).not.toBeVisible();
+  // The same action works inside an editor without closing that editor on Escape.
+  await card.click();
+  const editor = page.locator('.pad-composer');
+  await expect(editor).toBeVisible();
+  await editor.locator('.problem-card-maker').getByRole('button', { name: '텍스트로 한꺼번에', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async () => { throw new Error('Clipboard denied'); },
+    } });
+  });
+  await dialog.getByRole('button', { name: '텍스트 복사', exact: true }).click();
+  await expect(dialog.getByRole('status')).toContainText('직접 복사해주세요.');
+  expect(await text.evaluate((e: HTMLTextAreaElement) => e.selectionEnd - e.selectionStart)).toBe((await text.inputValue()).length);
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(editor).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(editor).not.toBeVisible();
 });

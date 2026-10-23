@@ -1,11 +1,42 @@
 "use client";
-import { AlertCircle, Clock3, Download, Eye, HeartCrack, Lightbulb, RotateCcw, Search, Sparkles, Target, UserRound } from "lucide-react";
-import type { ReactNode } from "react";
+import { AlertCircle, Clock3, Copy, Download, Eye, FileText, HeartCrack, Lightbulb, RotateCcw, Search, Sparkles, Target, UserRound, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { characterFor } from "@/lib/characters";
-import { definitionFields, problemCardMarkdown, questionFields, sentenceFields, statement, type Refinement } from "@/lib/refinement";
+import { definitionFields, problemCardMarkdown, problemCardText, questionFields, sentenceFields, statement, type Refinement } from "@/lib/refinement";
 import type { Member } from "@/lib/types";
 
 const sentenceReady = (r: Refinement) => sentenceFields.every(([k]) => r.definition[k].trim());
+
+function CardTextDialog({ text, onClose, onDownload }: { text: string; onClose: () => void; onDownload: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null), content = useRef<HTMLTextAreaElement>(null);
+  const [notice, setNotice] = useState("");
+  useEffect(() => { if (dialog.current && !dialog.current.open) dialog.current.showModal(); }, []);
+  async function copyText() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setNotice("텍스트를 복사했어요.");
+    } catch {
+      content.current?.focus(); content.current?.select();
+      setNotice("복사하지 못했어요. 선택된 텍스트를 직접 복사해주세요.");
+    }
+  }
+  return createPortal(
+    <dialog ref={dialog} className="card-text-dialog" aria-label="카드 전체 텍스트"
+      onKeyDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onClose(); }}
+      onCancel={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
+      onClose={(e) => { e.stopPropagation(); onClose(); }}>
+      <header><h3>카드 내용 한꺼번에</h3><button type="button" className="icon-button" aria-label="닫기" onClick={onClose}><X size={20} /></button></header>
+      <textarea ref={content} aria-label="정리된 카드 텍스트" value={text} readOnly spellCheck={false} />
+      <div className="card-text-actions">
+        <button type="button" className="secondary-button" onClick={copyText}><Copy size={15} /> 텍스트 복사</button>
+        <button type="button" className="primary-button" onClick={onDownload}><Download size={15} /> MD 다운로드</button>
+      </div>
+      <p className="card-text-notice" role="status">{notice}</p>
+    </dialog>, document.body,
+  );
+}
 
 /**
  * The finished problem card as it is exhibited and voted on: the one-sentence problem first, then the same
@@ -14,6 +45,7 @@ const sentenceReady = (r: Refinement) => sentenceFields.every(([k]) => r.definit
 /** `summary` shows only the one-sentence problem, for boards where every card keeps the same height until opened. */
 export function ProblemCard({ value, member, mine, origin, compact, badge, author, summary }: { value: Refinement; member?: Member; mine?: boolean; origin?: string; compact?: boolean; badge?: ReactNode; author?: string; summary?: boolean }) {
   const d = value.definition, a = value.answers;
+  const [textOpen, setTextOpen] = useState(false);
   function downloadMarkdown() {
     const title = origin?.trim() || "문제 카드";
     const filename = title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").slice(0, 100).replace(/[. ]+$/, "") || "문제 카드";
@@ -52,7 +84,8 @@ export function ProblemCard({ value, member, mine, origin, compact, badge, autho
         ) : null;
       })}
       {origin && !summary && <footer>출발한 생각 · {origin}</footer>}
-      {value.ready && <div className="problem-card-actions"><button type="button" className="secondary-button" onKeyDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); downloadMarkdown(); }}><Download size={15} /> MD 다운로드</button></div>}
+      {value.ready && <div className="problem-card-actions"><button type="button" className="secondary-button" onKeyDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setTextOpen(true); }}><FileText size={15} /> 텍스트로 한꺼번에</button></div>}
+      {textOpen && <CardTextDialog text={problemCardText(value, origin?.trim() || "문제 카드", author || member?.name)} onClose={() => setTextOpen(false)} onDownload={downloadMarkdown} />}
     </article>
   );
 }
