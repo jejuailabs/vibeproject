@@ -81,13 +81,14 @@ export function ProjectSteps(p: StepsProps) {
   const decisions = recordsOf(p, "decision").filter((x) => x.projectId === team.id);
   const meetings = recordsOf(p, "source").filter((x) => x.projectId === team.id && !x.data.redacted);
   const showcase = recordsOf(p, "showcase").find((x) => x.projectId === team.id);
-  // A deleted vote keeps its record (and round) on the server but is gone for the team.
-  const voteRecord = recordsOf(p, "teamVote").find((x) => x.projectId === team.id);
-  const vote = voteRecord?.data.state === "deleted" ? undefined : voteRecord;
+  const votes = recordsOf(p, "teamVote").filter((x) => x.projectId === team.id && x.data.state !== "deleted").sort((a, b) => b.data.round - a.data.round);
+  const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
+  const vote = votes.find((x) => x.id === selectedVoteId);
   const [voteBoard, setVoteBoard] = useState(false);
   useEffect(() => { if (step !== "confirm") setVoteBoard(false); }, [step]);
+  useEffect(() => { if (selectedVoteId && !vote) { setSelectedVoteId(null); setVoteBoard(false); } }, [selectedVoteId, vote]);
 
-  const myBallot = recordsOf(p, "teamBallot").find((x) => x.projectId === team.id && x.ownerId === me.id && x.data.round === vote?.data.round);
+  const myBallot = vote && recordsOf(p, "teamBallot").find((x) => x.projectId === team.id && x.ownerId === me.id && x.data.round === vote.data.round && (x.data.voteId === vote.id || (!x.data.voteId && vote.id === "teamvote-" + team.id)));
   const myPicks = myBallot ? myBallot.data.ideaIds ?? (myBallot.data.ideaId ? [myBallot.data.ideaId] : []) : [];
   const maxVotes = vote?.data.maxVotes || 1;
   const [voteLimit, setVoteLimit] = useState(1);
@@ -95,17 +96,18 @@ export function ProjectSteps(p: StepsProps) {
   const ended = recordsOf(p, "settings")[0]?.data.state === "completed";
   const commentCount = (id: string) => w.comments.filter((c) => c.ideaId === id).length;
   const wrote = (key: StepKey) => members.filter((m) => cards.some((i) => i.ownerId === m.id && cardDone(key, i))).length;
-  const problems = cards.filter((i) => i.refinement?.ready);
+  const problems = cards.filter((i) => i.refinement?.ready && i.state !== "closed_unselected");
+  const boardProblems = vote ? problems.filter((i) => vote.data.candidateIds.includes(i.id)) : problems;
   // Finished cards that are not in the open vote yet, e.g. written after the leader opened it.
   const fresh = vote?.data.state === "open" ? problems.filter((i) => !vote.data.candidateIds.includes(i.id)) : [];
-  const top = vote ? [...problems].sort((a, b) => (vote.data.counts[b.id] || 0) - (vote.data.counts[a.id] || 0))[0] : undefined;
+  const top = vote ? [...boardProblems].sort((a, b) => (vote.data.counts[b.id] || 0) - (vote.data.counts[a.id] || 0))[0] : undefined;
   useEffect(() => { if (vote?.data.state === "closed" && top && !pick) setPick(top.id); }, [vote?.data.state, top, pick]);
 
   const progress: Record<StepKey, { label: string; done: boolean }> = {
     thought: { label: `${wrote("thought")}/${members.length}명 작성`, done: wrote("thought") === members.length },
     questions: { label: `${wrote("questions")}/${members.length}명 작성`, done: wrote("questions") === members.length },
     definition: { label: `${wrote("definition")}/${members.length}명 작성`, done: wrote("definition") === members.length },
-    confirm: { label: team.confirmedProblem ? "확정됨" : vote?.data.state === "open" ? `투표 중 · ${vote.data.voters}명` : `문제 카드 ${problems.length}개`, done: !!team.confirmedProblem },
+    confirm: { label: team.confirmedProblem ? "확정됨" : votes.some((v) => v.data.state === "open") ? `투표 중 · ${votes.filter((v) => v.data.state === "open").length}개 방` : `문제 카드 ${problems.length}개`, done: !!team.confirmedProblem },
     plan: { label: `문서 ${docs.length}/7`, done: baselines.length > 0 },
     build: { label: `배포 ${releases.length}`, done: releases.length > 0 },
     show: { label: showcase?.data.state === "published" ? "공개" : showcase ? "작성 중" : "시작 전", done: showcase?.data.state === "published" },
@@ -155,7 +157,15 @@ export function ProjectSteps(p: StepsProps) {
     await p.saveIdea({ type: "deleteIdea", id: i.id, revision: i.revision });
   }
   function openCard(i: Idea) { if (step && step !== "thought" && canContinue(i)) continueAt(step, i); else p.onIdea(i.id); }
-  const castVote = (ideaId: string) => p.run({ type: "castTeamVote", projectId: team.id, ideaId });
+  const castVote = (ideaId: string) => vote && p.run({ type: "castTeamVote", projectId: team.id, voteId: vote.id, ideaId });
+  function openVoteBoard(voteId: string | null) {
+    setSelectedVoteId(voteId); setPick(""); setReason(""); setDetailId(null); setVoteBoard(true);
+  }
+  async function openNewVote() {
+    if (await p.run({ type: "openTeamVote", projectId: team.id, maxVotes: Math.min(voteLimit, problems.length) })) {
+      setSelectedVoteId(null); setPick(""); setReason(""); setVoteBoard(false);
+    }
+  }
   // Step 4 board: tapping a card opens all of it in a popup; the vote button is on the card and in the popup.
   const [detailId, setDetailId] = useState<string | null>(null), detailRef = useRef<HTMLDialogElement>(null);
   const detail = detailId ? cards.find((i) => i.id === detailId && i.refinement?.ready) : undefined;
@@ -285,41 +295,37 @@ export function ProjectSteps(p: StepsProps) {
 
       {step === "confirm" && !voteBoard && (
         <div className="vote-list">
-          {vote ? (
-            <article className={"vote-card " + vote.data.state}>
-              <span className="vote-card-state">{vote.data.state === "open" ? "투표 중" : vote.data.state === "closed" ? "투표 마감" : "투표 취소됨"}</span>
-              <h3>{vote.data.round}번째 투표</h3>
-              <p>후보 문제 카드 <b>{vote.data.candidateIds.length}장</b> · {vote.data.voters}/{members.length}명 참여 · 한 사람당 {vote.data.maxVotes || 1}표</p>
-              <small>{new Date(vote.data.openedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} 열림{vote.data.closedAt ? " · " + new Date(vote.data.closedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) + (vote.data.state === "cancelled" ? " 취소" : " 마감") : ""}</small>
-              {vote.data.state === "closed" && top && (vote.data.counts[top.id] || 0) > 0 && <blockquote><Crown size={13} /> {vote.data.counts[top.id]}표 · {statement(top.refinement!)}</blockquote>}
+          {votes.map((room) => {
+            const roomTop = problems.filter((i) => room.data.candidateIds.includes(i.id)).sort((a, b) => (room.data.counts[b.id] || 0) - (room.data.counts[a.id] || 0))[0];
+            return <article key={room.id} className={"vote-card " + room.data.state}>
+              <span className="vote-card-state">{room.data.state === "open" ? "투표 중" : room.data.state === "closed" ? "투표 마감" : "투표 취소됨"}</span>
+              <h3>{room.data.round}번째 투표</h3>
+              <p>후보 문제 카드 <b>{room.data.candidateIds.length}장</b> · {room.data.voters}/{members.length}명 참여 · 한 사람당 {room.data.maxVotes || 1}표</p>
+              <small>{new Date(room.data.openedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} 열림{room.data.closedAt ? " · " + new Date(room.data.closedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) + (room.data.state === "cancelled" ? " 취소" : " 마감") : ""}</small>
+              {room.data.state === "closed" && roomTop && (room.data.counts[roomTop.id] || 0) > 0 && <blockquote><Crown size={13} /> {room.data.counts[roomTop.id]}표 · {statement(roomTop.refinement!)}</blockquote>}
               <div className="vote-card-actions">
-                <button type="button" className="primary-button" onClick={() => setVoteBoard(true)}>{vote.data.state === "open" ? "투표하러 가기" : "카드·결과 보기"} <ArrowRight size={15} /></button>
-                {leader && !ended && <button type="button" className="secondary-button danger" disabled={p.busy} onClick={() => { if (window.confirm(vote.data.round + "번째 투표를 지울까요? 받은 표도 함께 사라지고 되돌릴 수 없어요.")) p.run({ type: "deleteTeamVote", projectId: team.id }); }}><Trash2 size={14} /> 투표 삭제</button>}
+                <button type="button" className="primary-button" onClick={() => openVoteBoard(room.id)}>{room.data.state === "open" ? "투표하러 가기" : "카드·결과 보기"} <ArrowRight size={15} /></button>
+                {leader && !ended && <button type="button" className="secondary-button danger" disabled={p.busy} onClick={() => { if (window.confirm(room.data.round + "번째 투표를 지울까요? 받은 표도 함께 사라지고 되돌릴 수 없어요.")) p.run({ type: "deleteTeamVote", projectId: team.id, voteId: room.id }); }}><Trash2 size={14} /> 투표 삭제</button>}
               </div>
-            </article>
-          ) : (
+            </article>;
+          })}
+          {!votes.length && (
             <article className="vote-card empty">
               <span className="vote-card-state">투표 없음</span>
               <h3>아직 열린 투표가 없어요</h3>
               <p>완성된 문제 카드 <b>{problems.length}장</b>{leader ? "" : " · 리더가 투표를 열면 여기서 고를 수 있어요."}</p>
-              <div className="vote-card-actions"><button type="button" className="secondary-button" onClick={() => setVoteBoard(true)}>카드 보기 <ArrowRight size={15} /></button></div>
+              <div className="vote-card-actions"><button type="button" className="secondary-button" onClick={() => openVoteBoard(null)}>카드 보기 <ArrowRight size={15} /></button></div>
             </article>
           )}
           {leader && !ended && (
             <article className="vote-card new">
               <span className="vote-card-state"><Plus size={12} /> 새 투표</span>
               <h3>새로운 투표 열기</h3>
-              {vote?.data.state === "open" ? (
-                <p>지금 열린 투표를 마감하거나 지운 뒤에 새 투표를 열 수 있어요.</p>
-              ) : (
-                <>
-                  <p>지금 완성된 문제 카드 <b>{problems.length}장</b>이 모두 후보가 돼요.</p>
-                  <div className="vote-card-actions">
-                    <label>한 사람당 <select aria-label="새 투표의 한 사람당 투표 수" value={Math.min(voteLimit, Math.max(1, problems.length))} onChange={(e) => setVoteLimit(Number(e.target.value))} disabled={p.busy || !problems.length}>{Array.from({ length: Math.max(1, Math.min(10, problems.length)) }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}표</option>)}</select></label>
-                    <button type="button" className="primary-button" disabled={p.busy || !problems.length} onClick={async () => { if (await p.run({ type: "openTeamVote", projectId: team.id, maxVotes: Math.min(voteLimit, problems.length) })) setVoteBoard(true); }}><Vote size={15} /> 새 투표 열기</button>
-                  </div>
-                </>
-              )}
+              <p>기존 투표와 별개로 새 투표방을 열어요. 지금 완성된 문제 카드 <b>{problems.length}장</b>이 모두 후보가 돼요.</p>
+              <div className="vote-card-actions">
+                <label>한 사람당 <select aria-label="새 투표의 한 사람당 투표 수" value={Math.min(voteLimit, Math.max(1, problems.length))} onChange={(e) => setVoteLimit(Number(e.target.value))} disabled={p.busy || !problems.length}>{Array.from({ length: Math.max(1, Math.min(10, problems.length)) }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}표</option>)}</select></label>
+                <button type="button" className="primary-button" disabled={p.busy || !problems.length} onClick={openNewVote}><Vote size={15} /> 새 투표 열기</button>
+              </div>
             </article>
           )}
         </div>
@@ -328,6 +334,7 @@ export function ProjectSteps(p: StepsProps) {
       {step === "confirm" && voteBoard && (
         <>
           <button type="button" className="text-button vote-back" onClick={() => setVoteBoard(false)}><ArrowLeft size={14} /> 투표 목록</button>
+          {vote && <h3>{vote.data.round}번째 투표</h3>}
           <div className="pj-vote">
             {team.confirmedProblem ? (
               <div className="steps-confirmed">
@@ -346,19 +353,19 @@ export function ProjectSteps(p: StepsProps) {
             {leader && !ended && (
               vote?.data.state === "open"
                 ? <div className="pj-vote-open">
-                    {fresh.length > 0 && <button className="secondary-button" disabled={p.busy} onClick={() => p.run({ type: "refreshTeamVote", projectId: team.id })}><Plus size={14} /> 새로 완성된 카드 {fresh.length}개 후보에 추가</button>}
-                    <button className="secondary-button" disabled={p.busy} onClick={() => { if (window.confirm("투표를 취소할까요? 지금까지 받은 표는 사라지고, 다시 열면 처음부터 투표해요.")) p.run({ type: "cancelTeamVote", projectId: team.id }); }}>투표 취소</button>
-                    <button className="primary-button" disabled={p.busy} onClick={() => p.run({ type: "closeTeamVote", projectId: team.id })}>투표 마감하기</button>
+                    {fresh.length > 0 && <button className="secondary-button" disabled={p.busy} onClick={() => p.run({ type: "refreshTeamVote", projectId: team.id, voteId: vote.id })}><Plus size={14} /> 새로 완성된 카드 {fresh.length}개 후보에 추가</button>}
+                    <button className="secondary-button" disabled={p.busy} onClick={() => { if (window.confirm("투표를 취소할까요? 지금까지 받은 표는 사라지고, 다시 열면 처음부터 투표해요.")) p.run({ type: "cancelTeamVote", projectId: team.id, voteId: vote.id }); }}>투표 취소</button>
+                    <button className="primary-button" disabled={p.busy} onClick={() => p.run({ type: "closeTeamVote", projectId: team.id, voteId: vote.id })}>투표 마감하기</button>
                   </div>
                 : <div className="pj-vote-open">
                     <label>한 사람당 <select aria-label="한 사람당 투표 수" value={Math.min(voteLimit, Math.max(1, problems.length))} onChange={(e) => setVoteLimit(Number(e.target.value))} disabled={p.busy || !problems.length}>{Array.from({ length: Math.max(1, Math.min(10, problems.length)) }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}표</option>)}</select></label>
-                    <button className={team.confirmedProblem || vote ? "secondary-button" : "primary-button"} disabled={p.busy || !problems.length} onClick={() => p.run({ type: "openTeamVote", projectId: team.id, maxVotes: Math.min(voteLimit, problems.length) })}><Vote size={15} /> {vote ? "다시 투표 열기" : "투표 열기"}</button>
+                    <button className={team.confirmedProblem || vote ? "secondary-button" : "primary-button"} disabled={p.busy || !problems.length} onClick={openNewVote}><Vote size={15} /> 새 투표 열기</button>
                   </div>
             )}
           </div>
           <form onSubmit={confirm}>
             <div className="vote-tiles">
-              {problems.map((i, n) => {
+              {boardProblems.map((i, n) => {
                 const owner = w.members.find((m) => m.id === i.ownerId), chosen = team.confirmedProblem?.ideaId === i.id, mineVote = myPicks.includes(i.id);
                 return (
                   <article key={i.id} className={"vote-tile" + (mineVote ? " voted" : "") + (pick === i.id ? " picked" : "") + (chosen ? " chosen" : "")} style={{ ["--accent" as string]: accents[n % accents.length] }} role="button" tabIndex={0} aria-label={(i.authorName || owner?.name || "팀원") + "의 문제 카드 자세히 보기"} onClick={() => setDetailId(i.id)} onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setDetailId(i.id); } }}>
@@ -378,7 +385,7 @@ export function ProjectSteps(p: StepsProps) {
                   </article>
                 );
               })}
-              {!problems.length && <div className="steps-empty"><p>아직 완성된 문제 카드가 없어요.</p><button type="button" className="primary-button" onClick={() => setStep("definition")}>문제 카드 만들러 가기 <ArrowRight size={15} /></button></div>}
+              {!boardProblems.length && <div className="steps-empty"><p>아직 완성된 문제 카드가 없어요.</p><button type="button" className="primary-button" onClick={() => setStep("definition")}>문제 카드 만들러 가기 <ArrowRight size={15} /></button></div>}
             </div>
             <dialog ref={detailRef} className="modal vote-detail" onCancel={() => setDetailId(null)} onClick={(e) => { if (e.target === e.currentTarget) setDetailId(null); }}>
               {detail && (

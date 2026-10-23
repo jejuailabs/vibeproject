@@ -1,0 +1,85 @@
+import { test, expect, type Page } from '@playwright/test';
+
+async function addProblem(page: Page, title: string) {
+  await page.getByRole('navigation', { name: '단계 이동' }).getByRole('button', { name: /각자 생각/ }).click();
+  await page.getByRole('button', { name: '긴 글·파일로 한 번에', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '각자 생각 입력' });
+  await dialog.locator('.quick-text').fill(title + ' 때문에 불편했던 경험입니다.');
+  await dialog.getByRole('button', { name: 'AI로 한 번에 정리하기', exact: true }).click();
+  await dialog.getByText('AI가 채운 1·2·3단계 내용 보기·고치기', { exact: true }).click();
+  const fields = dialog.locator('.quick-fields textarea');
+  await expect(fields).toHaveCount(12);
+  for (let i = 0; i < 12; i++) await fields.nth(i).fill(i === 0 ? title : '처음 온 사람이 모임 시작 전 대화 상대를 찾지 못해 혼자 기다립니다.');
+  await dialog.getByRole('button', { name: '새 카드로 저장하기', exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+}
+
+test('leaders open simultaneous rooms and members keep independent votes and results', async ({ page }) => {
+  test.setTimeout(90000);
+  await page.goto('/preview');
+  await page.getByLabel('미리보기 참가자').selectOption('jun');
+  await page.getByRole('button', { name: '대시보드', exact: true }).click();
+  await page.getByRole('button', { name: '채팅 닫기', exact: true }).click();
+  await page.locator('.pj-open').filter({ hasText: '첫걸음' }).click();
+  await page.getByRole('button', { name: /각자 생각/ }).click();
+  await addProblem(page, '첫 모임의 대화');
+  await addProblem(page, '신규 참가자 안내');
+  await page.getByRole('navigation', { name: '단계 이동' }).getByRole('button', { name: /최종 아이디어·투표/ }).click();
+
+  const room = (n: number) => page.locator('.vote-card').filter({ has: page.getByRole('heading', { name: `${n}번째 투표`, exact: true }) });
+  const firstCard = () => page.locator('.vote-tile').filter({ has: page.getByRole('heading', { name: /첫 모임의 대화/ }) });
+  await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
+  await room(1).getByRole('button', { name: '투표하러 가기' }).click();
+  await firstCard().getByRole('button', { name: '투표', exact: true }).click();
+  await expect(page.locator('.pj-vote')).toContainText('내가 고른 카드 1/1');
+  await page.getByRole('button', { name: '투표 목록', exact: true }).click();
+
+  await page.getByLabel('새 투표의 한 사람당 투표 수').selectOption('2');
+  await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
+  await expect(page.locator('.vote-card.open')).toHaveCount(2);
+  await expect(room(1)).toContainText('1/2명 참여 · 한 사람당 1표');
+  await expect(room(2)).toContainText('0/2명 참여 · 한 사람당 2표');
+  await room(2).getByRole('button', { name: '투표하러 가기' }).click();
+  await expect(page.locator('.pj-vote')).toContainText('내가 고른 카드 0/2');
+  await page.locator('.vote-tile').nth(0).getByRole('button', { name: '투표', exact: true }).click();
+  await page.locator('.vote-tile').nth(1).getByRole('button', { name: '투표', exact: true }).click();
+  await expect(page.locator('.pj-vote')).toContainText('내가 고른 카드 2/2');
+  await page.getByRole('button', { name: '투표 목록', exact: true }).click();
+  await room(1).getByRole('button', { name: '투표하러 가기' }).click();
+  await expect(page.locator('.pj-vote')).toContainText('내가 고른 카드 1/1');
+  await expect(firstCard()).toContainText('내 선택');
+  await page.getByRole('button', { name: '투표 마감하기', exact: true }).click();
+  await firstCard().getByRole('button', { name: '자세히 보기', exact: true }).click();
+  await expect(page.getByRole('dialog').locator('.pad-count')).toHaveText('1표');
+  await page.getByRole('dialog').getByRole('button', { name: '닫기', exact: true }).click();
+  await page.getByRole('button', { name: '투표 목록', exact: true }).click();
+  await expect(room(1)).toContainText('투표 마감');
+  await expect(room(2)).toContainText('투표 중');
+
+  await page.getByLabel('미리보기 참가자').selectOption('seo');
+  await expect(page.getByRole('button', { name: '새 투표 열기', exact: true })).toHaveCount(0);
+  await room(2).getByRole('button', { name: '투표하러 가기' }).click();
+  await expect(page.locator('.pj-vote')).toContainText('내가 고른 카드 0/2');
+  await firstCard().getByRole('button', { name: '투표', exact: true }).click();
+  await page.getByRole('button', { name: '투표 목록', exact: true }).click();
+  await page.getByLabel('미리보기 참가자').selectOption('jun');
+  await expect(room(2)).toContainText('2/2명 참여');
+  await room(2).getByRole('button', { name: '투표하러 가기' }).click();
+  await expect(page.locator('.pj-vote')).toContainText('내가 고른 카드 2/2');
+  await page.getByRole('button', { name: '투표 마감하기', exact: true }).click();
+  await firstCard().getByRole('button', { name: '자세히 보기', exact: true }).click();
+  await expect(page.getByRole('dialog').locator('.pad-count')).toHaveText('2표');
+  await page.getByRole('dialog').getByRole('button', { name: '닫기', exact: true }).click();
+  await page.getByRole('button', { name: '투표 목록', exact: true }).click();
+  await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await room(1).getByRole('button', { name: '투표 삭제', exact: true }).click();
+  await expect(room(1)).toHaveCount(0);
+  await expect(room(2)).toContainText('투표 마감');
+  await expect(room(3)).toContainText('투표 중');
+  await page.screenshot({ path: 'work/team-vote-rooms-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await expect(page.getByRole('button', { name: '새 투표 열기', exact: true })).toBeEnabled();
+  await page.screenshot({ path: 'work/team-vote-rooms-mobile.png', fullPage: true });
+});
