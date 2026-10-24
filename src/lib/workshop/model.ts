@@ -135,6 +135,10 @@ export interface DataMap {
     top?: { ideaId: string; rank: number; votes: number }[] };
   // ideaId is the single pick of votes opened before multi-vote; ideaIds holds every pick.
   teamBallot: { round: number; voteId?: string; ideaId?: string; ideaIds?: string[] };
+  // After a main vote: each member, under a nickname, goes with a team or alone on one of their own cards.
+  // Picks are open to the whole room so everyone sees who goes where.
+  pathVote: { voteId: string; round: number; state: "open" | "closed"; openedAt: string; closedAt: string | null; endsAt: string | null;
+    picks: Record<string, { nickname: string; choice: "team" | "solo"; ideaId?: string }>; abstained?: number; endedBy?: "time" | "manual" };
   project: ProjectData;
   join: {
     applicantId: string;

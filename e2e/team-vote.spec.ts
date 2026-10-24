@@ -119,6 +119,106 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await page.screenshot({ path: 'work/team-vote-rooms-mobile.png', fullPage: true });
 });
 
+test('after a vote closes, members choose team or solo under a nickname and everyone sees the lists', async ({ page }) => {
+  test.setTimeout(90000);
+  await page.goto('/preview');
+  await page.getByLabel('미리보기 참가자').selectOption('jun');
+  await page.getByRole('button', { name: '대시보드', exact: true }).click();
+  await page.getByRole('button', { name: '채팅 닫기', exact: true }).click();
+  await page.locator('.pj-open').filter({ hasText: '첫걸음' }).click();
+  await page.getByRole('button', { name: /각자 생각/ }).click();
+  await addProblem(page, '준의 모임 문제');
+  await page.getByLabel('미리보기 참가자').selectOption('seo');
+  await addProblem(page, '서의 안내 문제');
+  await page.getByLabel('미리보기 참가자').selectOption('jun');
+  await page.getByRole('navigation', { name: '단계 이동' }).getByRole('button', { name: /최종 아이디어·투표/ }).click();
+
+  const room = page.locator('.vote-card').filter({ has: page.getByRole('heading', { name: '1번째 투표', exact: true }) });
+  await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
+  const picker = page.getByRole('dialog', { name: '투표 후보 고르기', exact: true });
+  await picker.getByLabel('새 투표의 투표 시간').selectOption('0');
+  await picker.getByRole('button', { name: '2장으로 투표 시작', exact: true }).click();
+  await room.getByRole('button', { name: '대시보드', exact: true }).click();
+  const dash = page.getByRole('dialog', { name: '투표 대시보드', exact: true });
+  page.once('dialog', (d) => d.accept());
+  await dash.getByRole('button', { name: '투표 종료', exact: true }).click();
+  await expect(dash.getByRole('heading', { name: '1번째 투표 결과', exact: true })).toBeVisible();
+  await dash.getByRole('button', { name: '닫기', exact: true }).click();
+
+  // The leader opens the team-or-solo vote and picks team.
+  await room.getByRole('button', { name: '팀·개별 투표 열기' }).click();
+  const path = page.getByRole('dialog', { name: '팀·개별 투표', exact: true });
+  await expect(path).toContainText(/남은 시간 0?[45]:\d\d/);
+  await expect(path.getByRole('button', { name: '제출', exact: true })).toBeDisabled();
+  await path.getByLabel('닉네임').fill('준');
+  await path.getByRole('button', { name: /팀으로 갈래요/ }).click();
+  await path.getByRole('button', { name: '제출', exact: true }).click();
+  await expect(path.locator('.path-result section').nth(0)).toContainText('준');
+  await path.getByRole('button', { name: '닫기', exact: true }).click();
+
+  // A member goes solo on their own card and only sees the lists after the close.
+  await page.getByLabel('미리보기 참가자').selectOption('seo');
+  await room.getByRole('button', { name: /팀·개별 고르기/ }).click();
+  await path.getByLabel('닉네임').fill('서');
+  await path.getByRole('button', { name: /개별로 갈래요/ }).click();
+  await expect(path.getByLabel('개별로 갈 내 아이디어')).toHaveValue(/.+/);
+  await path.getByRole('button', { name: '제출', exact: true }).click();
+  await expect(path).toContainText('나는 개별로 제출함');
+  await expect(path.locator('.path-result')).toHaveCount(0);
+  await path.getByRole('button', { name: '닫기', exact: true }).click();
+
+  await page.getByLabel('미리보기 참가자').selectOption('jun');
+  await room.getByRole('button', { name: /팀·개별 고르기/ }).click();
+  page.once('dialog', (d) => d.accept());
+  await path.getByRole('button', { name: '팀·개별 투표 종료', exact: true }).click();
+  await expect(path).toContainText('투표 종료');
+  await path.getByRole('button', { name: '닫기', exact: true }).click();
+
+  await page.getByLabel('미리보기 참가자').selectOption('seo');
+  await room.getByRole('button', { name: '팀·개별 결과' }).click();
+  await expect(path.locator('.path-result section').nth(0)).toContainText('팀으로 · 1명');
+  await expect(path.locator('.path-result section').nth(0)).toContainText('준');
+  await expect(path.locator('.path-result section').nth(1)).toContainText('개별로 · 1명');
+  await expect(path.locator('.path-result section').nth(1)).toContainText('서의 안내 문제');
+  await expect(path.getByLabel('닉네임')).toHaveCount(0);
+  await page.screenshot({ path: 'work/team-vote-path-result.png' });
+});
+
+test('the leader checks which newly finished cards join an open vote, newest edits first', async ({ page }) => {
+  test.setTimeout(90000);
+  await page.goto('/preview');
+  await page.getByLabel('미리보기 참가자').selectOption('jun');
+  await page.getByRole('button', { name: '대시보드', exact: true }).click();
+  await page.getByRole('button', { name: '채팅 닫기', exact: true }).click();
+  await page.locator('.pj-open').filter({ hasText: '첫걸음' }).click();
+  await page.getByRole('button', { name: /각자 생각/ }).click();
+  await addProblem(page, '처음 카드');
+  const toVote = () => page.getByRole('navigation', { name: '단계 이동' }).getByRole('button', { name: /최종 아이디어·투표/ }).click();
+  await toVote();
+  await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
+  await page.getByRole('dialog', { name: '투표 후보 고르기', exact: true }).getByRole('button', { name: '1장으로 투표 시작', exact: true }).click();
+  await addProblem(page, '두 번째 카드');
+  await addProblem(page, '세 번째 카드');
+  await toVote();
+  const room = page.locator('.vote-card').filter({ has: page.getByRole('heading', { name: '1번째 투표', exact: true }) });
+  await room.getByRole('button', { name: '투표하러 가기' }).click();
+  await page.getByRole('button', { name: '새로 완성된 카드 2개 후보에 추가' }).click();
+  const add = page.getByRole('dialog', { name: '후보 카드 추가', exact: true });
+  const boxes = add.getByRole('checkbox');
+  await expect(boxes).toHaveCount(3);
+  // Newest edits first; the current candidate stays checked and locked, new cards start unchecked.
+  await expect(add.locator('.vote-picker-list li').first()).toContainText('세 번째 카드');
+  await expect(add.getByRole('checkbox', { name: /처음 카드/ })).toBeChecked();
+  await expect(add.getByRole('checkbox', { name: /처음 카드/ })).toBeDisabled();
+  await expect(add.getByRole('checkbox', { name: /두 번째 카드/ })).not.toBeChecked();
+  await expect(add.getByRole('button', { name: '0장 후보에 추가', exact: true })).toBeDisabled();
+  await add.getByRole('checkbox', { name: /세 번째 카드/ }).check();
+  await add.getByRole('button', { name: '1장 후보에 추가', exact: true }).click();
+  await expect(add).not.toBeVisible();
+  await expect(page.locator('.vote-tile')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: '새로 완성된 카드 1개 후보에 추가' })).toBeVisible();
+});
+
 test('a completed card previews plain text, copies it and downloads Markdown in its own dialog', async ({ page }) => {
   test.setTimeout(60000);
   await page.goto('/preview');

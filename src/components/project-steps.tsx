@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronDown, Crown, Download, MessageCircle, Pencil, Plus, Sparkles, Trash2, Vote, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronDown, Crown, Download, MessageCircle, Pencil, Plus, Sparkles, Trash2, Users, Vote, X } from "lucide-react";
 import { IdeaRefinement } from "./idea-refinement";
 import { characterFor } from "@/lib/characters";
 import { canReadIdea } from "@/lib/policy";
@@ -100,13 +100,17 @@ export function ProjectSteps(p: StepsProps) {
   const [voteLimit, setVoteLimit] = useState(1), [voteMinutes, setVoteMinutes] = useState(10);
   // A timed vote ticks every second; past its deadline nobody can vote, and the opener's screen closes it.
   const [now, setNow] = useState(() => Date.now());
-  const timed = step === "confirm" && votes.some((v) => v.data.state === "open" && v.data.endsAt);
+  // Team-or-solo votes that follow a closed main vote, one per main vote.
+  const paths = recordsOf(p, "pathVote").filter((x) => x.projectId === team.id);
+  const pathOf = (voteId: string) => paths.find((x) => x.data.voteId === voteId);
+  const timed = step === "confirm" && [...votes, ...paths].some((v) => v.data.state === "open" && v.data.endsAt);
   useEffect(() => { if (!timed) return; setNow(Date.now()); const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [timed]);
-  const timeUp = (v: (typeof votes)[number]) => v.data.state === "open" && !!v.data.endsAt && Date.parse(v.data.endsAt) <= now;
+  const timeUp = (v: { data: { state: string; endsAt?: string | null } }) => v.data.state === "open" && !!v.data.endsAt && Date.parse(v.data.endsAt) <= now;
   const closing = useRef(new Set<string>());
   const { run } = p;
   useEffect(() => {
     for (const v of votes) if (timeUp(v) && v.ownerId === me.id && !closing.current.has(v.id)) { closing.current.add(v.id); void run({ type: "closeTeamVote", projectId: team.id, voteId: v.id }); }
+    for (const v of paths) if (timeUp(v) && v.ownerId === me.id && !closing.current.has(v.id)) { closing.current.add(v.id); void run({ type: "closePathVote", projectId: team.id, pathId: v.id }); }
   });
   const voteOpen = vote?.data.state === "open" && !timeUp(vote);
   const chats = w.messages.filter((m) => m.channel === team.id).length;
@@ -193,6 +197,22 @@ export function ProjectSteps(p: StepsProps) {
   const [dashId, setDashId] = useState<string | null>(null), dashRef = useRef<HTMLDialogElement>(null);
   const dash = votes.find((v) => v.id === dashId && v.ownerId === me.id);
   useEffect(() => { const d = dashRef.current; if (!d) return; if (dash && !d.open) d.showModal(); else if (!dash && d.open) d.close(); }, [dash]);
+  // Team-or-solo vote window: everyone picks under a nickname; the picks show once it closes (the opener sees them live).
+  const [pathId, setPathId] = useState<string | null>(null), pathRef = useRef<HTMLDialogElement>(null);
+  const pathView = paths.find((x) => x.id === pathId);
+  useEffect(() => { const d = pathRef.current; if (!d) return; if (pathView && !d.open) d.showModal(); else if (!pathView && d.open) d.close(); }, [pathView]);
+  const [pathMinutes, setPathMinutes] = useState(5), [nick, setNick] = useState(""), [choice, setChoice] = useState<"team" | "solo" | "">(""), [soloIdea, setSoloIdea] = useState("");
+  const myProblems = problems.filter((i) => i.ownerId === me.id);
+  function openPath(id: string) {
+    const mine = paths.find((x) => x.id === id)?.data.picks[me.id];
+    setNick(mine?.nickname || ""); setChoice(mine?.choice || ""); setSoloIdea(mine?.ideaId || myProblems[0]?.id || ""); setPathId(id);
+  }
+  async function startPath(voteId: string) {
+    if (await p.run({ type: "openPathVote", projectId: team.id, voteId, ...(pathMinutes ? { minutes: pathMinutes } : {}) })) openPath("pathvote-" + voteId);
+  }
+  function submitPath() {
+    if (pathView && choice) void p.run({ type: "pickPath", projectId: team.id, pathId: pathView.id, nickname: nick.trim(), choice, ...(choice === "solo" ? { ideaId: soloIdea } : {}) });
+  }
   // "PDF로 저장" prints only the report, copied straight under <body>; the browser's print window saves it as PDF.
   const [printing, setPrinting] = useState(false);
   useEffect(() => {
@@ -264,6 +284,15 @@ export function ProjectSteps(p: StepsProps) {
         )}
       </>
     );
+  }
+  // Adding to an open vote: current candidates stay checked and locked; the leader checks which new cards join.
+  const [adding, setAdding] = useState(false), [addChosen, setAddChosen] = useState<string[]>([]), addRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => { const d = addRef.current; if (!d) return; if (adding && !d.open) d.showModal(); else if (!adding && d.open) d.close(); }, [adding]);
+  const recent = [...problems].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const edited = (i: Idea) => new Date(i.updatedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) + " 수정";
+  async function addCandidates() {
+    const ids = fresh.filter((i) => addChosen.includes(i.id)).map((i) => i.id);
+    if (vote && ids.length && (await p.run({ type: "refreshTeamVote", projectId: team.id, voteId: vote.id, ideaIds: ids }))) setAdding(false);
   }
   function startPicking() { setChosen(problems.map((i) => i.id)); setPicking(true); }
   async function openNewVote() {
@@ -412,6 +441,15 @@ export function ProjectSteps(p: StepsProps) {
               <div className="vote-card-actions">
                 <button type="button" className="primary-button" onClick={() => openVoteBoard(room.id)}>{room.data.state === "open" ? "투표하러 가기" : "카드·결과 보기"} <ArrowRight size={15} /></button>
                 {room.ownerId === me.id && room.data.state !== "cancelled" && <button type="button" className="secondary-button" onClick={() => setDashId(room.id)}><BarChart3 size={14} /> 대시보드</button>}
+                {room.data.state === "closed" && (() => {
+                  const pv = pathOf(room.id);
+                  if (pv) return <button type="button" className="secondary-button path-open" onClick={() => openPath(pv.id)}><Users size={14} /> {pv.data.state === "open" && !timeUp(pv) ? "팀·개별 고르기" + (pv.data.endsAt ? " · " + clock(Date.parse(pv.data.endsAt) - now) : "") : "팀·개별 결과"}</button>;
+                  if (!leader || ended) return null;
+                  return <span className="path-start">
+                    <select aria-label="팀·개별 투표 시간" value={pathMinutes} onChange={(e) => setPathMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{m ? m + "분" : "제한 없음"}</option>)}</select>
+                    <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startPath(room.id)}><Users size={14} /> 팀·개별 투표 열기</button>
+                  </span>;
+                })()}
                 {leader && !ended && <button type="button" className="secondary-button danger" disabled={p.busy} onClick={() => { if (window.confirm(room.data.round + "번째 투표를 지울까요? 받은 표도 함께 사라지고 되돌릴 수 없어요.")) p.run({ type: "deleteTeamVote", projectId: team.id, voteId: room.id }); }}><Trash2 size={14} /> 투표 삭제</button>}
               </div>
             </article>;
@@ -461,7 +499,7 @@ export function ProjectSteps(p: StepsProps) {
             {leader && !ended && (
               vote?.data.state === "open"
                 ? <div className="pj-vote-open">
-                    {fresh.length > 0 && <button className="secondary-button" disabled={p.busy} onClick={() => p.run({ type: "refreshTeamVote", projectId: team.id, voteId: vote.id })}><Plus size={14} /> 새로 완성된 카드 {fresh.length}개 후보에 추가</button>}
+                    {fresh.length > 0 && <button className="secondary-button" disabled={p.busy} onClick={() => { setAddChosen([]); setAdding(true); }}><Plus size={14} /> 새로 완성된 카드 {fresh.length}개 후보에 추가</button>}
                     <button className="secondary-button" disabled={p.busy} onClick={() => { if (window.confirm("투표를 취소할까요? 지금까지 받은 표는 사라지고, 다시 열면 처음부터 투표해요.")) p.run({ type: "cancelTeamVote", projectId: team.id, voteId: vote.id }); }}>투표 취소</button>
                     <button className="primary-button" disabled={p.busy} onClick={() => p.run({ type: "closeTeamVote", projectId: team.id, voteId: vote.id })}>투표 마감하기</button>
                   </div>
@@ -587,8 +625,8 @@ export function ProjectSteps(p: StepsProps) {
               <button type="button" className="text-button" disabled={!picked.length} onClick={() => setChosen([])}>전체 해제</button>
             </div>
             <ul className="vote-picker-list">
-              {problems.map((i) => (
-                <li key={i.id}><label><input type="checkbox" checked={chosen.includes(i.id)} onChange={(e) => setChosen((c) => (e.target.checked ? [...c, i.id] : c.filter((x) => x !== i.id)))} /> <span>{i.title}</span></label></li>
+              {recent.map((i) => (
+                <li key={i.id}><label><input type="checkbox" checked={chosen.includes(i.id)} onChange={(e) => setChosen((c) => (e.target.checked ? [...c, i.id] : c.filter((x) => x !== i.id)))} /> <span>{i.title}</span><small>{edited(i)}</small></label></li>
               ))}
             </ul>
             <div className="vote-detail-actions">
@@ -601,8 +639,81 @@ export function ProjectSteps(p: StepsProps) {
         )}
       </dialog>
 
+      <dialog ref={addRef} className="modal vote-picker" aria-label="후보 카드 추가" onCancel={() => setAdding(false)} onClose={() => setAdding(false)} onClick={(e) => { if (e.target === e.currentTarget) setAdding(false); }}>
+        {adding && vote && (() => {
+          const picked = fresh.filter((i) => addChosen.includes(i.id));
+          return (
+            <>
+              <div className="vote-detail-head">
+                <div><h3>후보 카드 추가</h3><small>이미 후보인 카드는 그대로 두고, 추가할 새 카드만 체크해요. 최근에 고친 카드가 위에 있어요.</small></div>
+                <button type="button" className="icon-button" aria-label="닫기" onClick={() => setAdding(false)}><X size={20} /></button>
+              </div>
+              <div className="vote-picker-bar">
+                <span>새 카드 <b>{picked.length}</b>/{fresh.length}장 선택 · 지금 후보 {vote.data.candidateIds.length}장</span>
+                <button type="button" className="text-button" disabled={picked.length === fresh.length} onClick={() => setAddChosen(fresh.map((i) => i.id))}>새 카드 전체 선택</button>
+                <button type="button" className="text-button" disabled={!picked.length} onClick={() => setAddChosen([])}>전체 해제</button>
+              </div>
+              <ul className="vote-picker-list">
+                {recent.map((i) => {
+                  const locked = vote.data.candidateIds.includes(i.id);
+                  return <li key={i.id} className={locked ? "locked" : ""}><label><input type="checkbox" checked={locked || addChosen.includes(i.id)} disabled={locked} onChange={(e) => setAddChosen((c) => (e.target.checked ? [...c, i.id] : c.filter((x) => x !== i.id)))} /> <span>{i.title}</span>{locked ? <em>후보</em> : <em className="new">새 카드</em>}<small>{edited(i)}</small></label></li>;
+                })}
+              </ul>
+              <div className="vote-detail-actions">
+                <button type="button" className="secondary-button" onClick={() => setAdding(false)}>취소</button>
+                <button type="button" className="primary-button" disabled={p.busy || !picked.length} onClick={addCandidates}><Plus size={15} /> {picked.length}장 후보에 추가</button>
+              </div>
+            </>
+          );
+        })()}
+      </dialog>
+
       <dialog ref={dashRef} className="vote-dash" aria-label="투표 대시보드" onCancel={() => setDashId(null)} onClose={() => setDashId(null)}>
         {dash && dashBody(dash, false)}
+      </dialog>
+      <dialog ref={pathRef} className="modal path-vote" aria-label="팀·개별 투표" onCancel={() => setPathId(null)} onClose={() => setPathId(null)}>
+        {pathView && (() => {
+          const d = pathView.data, live = d.state === "open" && !timeUp(pathView), opener = pathView.ownerId === me.id;
+          const picks = Object.values(d.picks), team_ = picks.filter((x) => x.choice === "team"), solo = picks.filter((x) => x.choice === "solo");
+          const mine = d.picks[me.id];
+          return (
+            <>
+              <div className="vote-detail-head">
+                <div>
+                  <span className="path-kicker">{d.round}번째 투표 뒤 · {live ? (d.endsAt ? "남은 시간 " + clock(Date.parse(d.endsAt) - now) : "시간 제한 없음") : d.state === "open" ? "시간 종료 · 결과를 모으고 있어요" : "투표 종료"}</span>
+                  <h3>팀으로 갈까요, 개별로 갈까요?</h3>
+                </div>
+                <button type="button" className="icon-button" aria-label="닫기" onClick={() => setPathId(null)}><X size={20} /></button>
+              </div>
+              {live && !ended && (
+                <div className="path-form">
+                  <label className="path-nick">닉네임 <input value={nick} onChange={(e) => setNick(e.target.value)} maxLength={20} placeholder="결과 명단에 보일 이름" aria-label="닉네임" /></label>
+                  <small>구글 계정 이름과 따로, 결과 명단에는 이 닉네임으로 보여요.</small>
+                  <div className="path-choices">
+                    <button type="button" aria-pressed={choice === "team"} className={"path-choice" + (choice === "team" ? " on" : "")} onClick={() => setChoice("team")}><strong>팀으로 갈래요</strong><span>꼭 내 아이디어가 아니어도 괜찮아요</span></button>
+                    <button type="button" aria-pressed={choice === "solo"} className={"path-choice" + (choice === "solo" ? " on" : "")} disabled={!myProblems.length} onClick={() => setChoice("solo")}><strong>개별로 갈래요</strong><span>{myProblems.length ? "꼭 내 아이디어로 하고 싶어요" : "내 완성된 문제 카드가 있어야 고를 수 있어요"}</span></button>
+                  </div>
+                  {choice === "solo" && <label className="path-idea">내 아이디어 <select aria-label="개별로 갈 내 아이디어" value={soloIdea} onChange={(e) => setSoloIdea(e.target.value)}>{myProblems.map((i) => <option key={i.id} value={i.id}>{i.title}</option>)}</select></label>}
+                  <div className="vote-detail-actions">
+                    <span className="path-count">{picks.length}/{members.length}명 제출{mine ? " · 나는 " + (mine.choice === "team" ? "팀으로" : "개별로") + " 제출함" : ""}</span>
+                    <button type="button" className="primary-button" disabled={p.busy || !choice || !nick.trim() || (choice === "solo" && !soloIdea)} onClick={submitPath}>{mine ? "다시 제출" : "제출"}</button>
+                  </div>
+                  {!opener && <p className="steps-muted">마감되면 누가 팀으로, 누가 개별로 가는지 여기서 볼 수 있어요.</p>}
+                </div>
+              )}
+              {(!live || opener) && (
+                <div className="path-result">
+                  <section><h4>팀으로 · {team_.length}명</h4><ul>{team_.map((x, k) => <li key={k}>{x.nickname}</li>)}</ul>{!team_.length && <p className="steps-muted">아직 없어요.</p>}</section>
+                  <section><h4>개별로 · {solo.length}명</h4><ul>{solo.map((x, k) => <li key={k}><strong>{x.nickname}</strong><small>{cards.find((i) => i.id === x.ideaId)?.title || "내 아이디어"}</small></li>)}</ul>{!solo.length && <p className="steps-muted">아직 없어요.</p>}</section>
+                  <p className="path-abstain">{d.state === "closed" ? "기권 " + (d.abstained ?? 0) + "명" : "아직 안 고른 사람 " + Math.max(0, members.length - picks.length) + "명"}</p>
+                </div>
+              )}
+              {opener && d.state === "open" && !ended && (
+                <div className="vote-detail-actions"><button type="button" className="secondary-button" disabled={p.busy} onClick={() => { if (window.confirm("팀·개별 투표를 마감할까요? 아직 고르지 않은 사람은 기권으로 처리돼요.")) p.run({ type: "closePathVote", projectId: team.id, pathId: pathView.id }); }}>팀·개별 투표 종료</button></div>
+              )}
+            </>
+          );
+        })()}
       </dialog>
       {printing && dash && createPortal(<div className="vote-print">{dashBody(dash, true)}</div>, document.body)}
 

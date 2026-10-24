@@ -105,6 +105,47 @@ test('closing a vote marks the 1st to 5th cards with votes, ties sharing a rank'
  ]);
 });
 
+test('after a main vote members choose team or solo under a nickname, and everyone sees the result',async()=>{
+ const w=previewWorkspace();
+ for(const [id,owner] of [['f1','seo'],['f2','jun']] as const){const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project'});w.ideas.push(c);}
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ const main=vote(s)!.id;
+ await assert.rejects(run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId:main}),/마감된 투표/);
+ s=await run(s,'jun',{type:'closeTeamVote',projectId:'p-onboarding'});
+ await assert.rejects(run(s,'seo',{type:'openPathVote',projectId:'p-onboarding',voteId:main}),/팀장/);
+ s=await run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId:main,minutes:5});
+ await assert.rejects(run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId:main}),/이미 열었/);
+ const pv=()=>s.records.find((r):r is RecordOf<'pathVote'>=>r.kind==='pathVote')!;
+ const pathId=pv().id;
+ // Going solo needs one of my own finished cards.
+ await assert.rejects(run(s,'seo',{type:'pickPath',projectId:'p-onboarding',pathId,nickname:'서오',choice:'solo'}),/내 완성된 문제 카드/);
+ await assert.rejects(run(s,'seo',{type:'pickPath',projectId:'p-onboarding',pathId,nickname:'서오',choice:'solo',ideaId:'f2'}),/내 완성된 문제 카드/);
+ s=await run(s,'seo',{type:'pickPath',projectId:'p-onboarding',pathId,nickname:'서오',choice:'solo',ideaId:'f1'});
+ s=await run(s,'jun',{type:'pickPath',projectId:'p-onboarding',pathId,nickname:' 준 ',choice:'solo',ideaId:'f2'});
+ // A member may change their mind while it is open.
+ s=await run(s,'jun',{type:'pickPath',projectId:'p-onboarding',pathId,nickname:'준',choice:'team'});
+ assert.deepEqual(pv().data.picks,{seo:{nickname:'서오',choice:'solo',ideaId:'f1'},jun:{nickname:'준',choice:'team'}});
+ await assert.rejects(run(s,'seo',{type:'closePathVote',projectId:'p-onboarding',pathId}),/팀장/);
+ pv().data.endsAt=new Date(Date.now()-1000).toISOString();
+ await assert.rejects(run(s,'seo',{type:'pickPath',projectId:'p-onboarding',pathId,nickname:'서오',choice:'team'}),/시간이 끝났/);
+ s=await run(s,'seo',{type:'closePathVote',projectId:'p-onboarding',pathId});
+ const members=s.workspace.projects.find(p=>p.id==='p-onboarding')!.memberIds.length;
+ assert.equal(pv().data.state,'closed');assert.equal(pv().data.endedBy,'time');assert.equal(pv().data.abstained,members-2);
+});
+
+test('the leader adds only the new cards they check to an open vote',async()=>{
+ const w=previewWorkspace();
+ const make=(id:string)=>{const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:'seo',projectId:'p-onboarding',scope:'project'});return c;};
+ w.ideas.push(make('g1'));
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ s.workspace.ideas.push(make('g2'),make('g3'));
+ await assert.rejects(run(s,'jun',{type:'refreshTeamVote',projectId:'p-onboarding',ideaIds:['g1']}),/후보가 아닌/);
+ s=await run(s,'jun',{type:'refreshTeamVote',projectId:'p-onboarding',ideaIds:['g3']});
+ assert.deepEqual(vote(s)!.data.candidateIds,['g1','g3']);
+});
+
 test('the leader adds cards finished after the vote opened, and can cancel the vote to start over',async()=>{
  const w=previewWorkspace();
  const make=(id:string,owner:string)=>{const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project'});return c;};

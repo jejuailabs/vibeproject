@@ -274,7 +274,10 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       const p = await project(c, cmd.projectId, "leader");
       const vote = await teamVote(c, p.id, cmd.voteId);
       if (vote?.data.state !== "open") fail("열려 있는 투표가 없습니다.");
-      const added = (await voteCards(c, p)).map((i) => i.id).filter((id) => !vote.data.candidateIds.includes(id));
+      const fresh = (await voteCards(c, p)).map((i) => i.id).filter((id) => !vote.data.candidateIds.includes(id));
+      // The leader picks which new cards join; without a list every new finished card joins.
+      if (cmd.ideaIds?.some((id) => !fresh.includes(id))) fail("후보가 아닌 완성된 문제 카드만 추가할 수 있습니다.");
+      const added = cmd.ideaIds ? fresh.filter((id) => cmd.ideaIds!.includes(id)) : fresh;
       if (!added.length) fail("새로 추가할 완성된 문제 카드가 없습니다.");
       write(c, vote.id, "teamVote", { ...vote.data, candidateIds: [...vote.data.candidateIds, ...added] }, "project", p.id, vote.ownerId, vote);
       event(c, "투표 후보 추가", "문제 카드 " + added.length + "개", p.id, p.id);
@@ -314,6 +317,48 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       write(c, vote.id, "teamVote", { ...vote.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual", top }, "project", p.id, vote.ownerId, vote);
       event(c, "투표 마감", vote.data.voters + "명 참여 · 기권 " + abstained + "명" + (timeUp ? " · 시간 종료" : ""), p.id, p.id);
       return { id: p.id };
+    }
+    case "openPathVote": {
+      // One team-or-solo vote follows each closed main vote.
+      const p = await project(c, cmd.projectId, "leader");
+      const vote = await teamVote(c, p.id, cmd.voteId);
+      if (vote?.data.state !== "closed") fail("마감된 투표가 있어야 팀·개별 투표를 열 수 있습니다.");
+      const id = "pathvote-" + vote.id;
+      if (await optional(c, id, "pathVote")) fail("이 투표의 팀·개별 투표는 이미 열었습니다.");
+      const endsAt = cmd.minutes ? new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString() : null;
+      write(c, id, "pathVote", { voteId: vote.id, round: vote.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, picks: {} }, "project", p.id);
+      event(c, "팀·개별 투표 열기", vote.data.round + "번째 투표 뒤", p.id, p.id);
+      for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "팀으로 갈지 개별로 갈지 골라주세요.", p.id, "project");
+      return { id };
+    }
+    case "pickPath": {
+      const p = await project(c, cmd.projectId);
+      const pv = await optional(c, cmd.pathId, "pathVote");
+      if (!pv || pv.projectId !== p.id) fail("이 프로젝트의 투표가 아닙니다.");
+      if (pv.data.state !== "open") fail("팀·개별 투표가 마감되었습니다.");
+      if (pv.data.endsAt && pv.data.endsAt <= c.now) fail("투표 시간이 끝났습니다.");
+      let ideaId: string | undefined;
+      if (cmd.choice === "solo") {
+        // Going alone means going with one of my own finished problem cards.
+        const mine = (await voteCards(c, p)).filter((i) => i.ownerId === c.uid);
+        if (!cmd.ideaId || !mine.some((i) => i.id === cmd.ideaId)) fail("개별로 가려면 내 완성된 문제 카드를 하나 골라주세요.");
+        ideaId = cmd.ideaId;
+      }
+      const pick = { nickname: cmd.nickname.trim(), choice: cmd.choice, ...(ideaId ? { ideaId } : {}) };
+      write(c, pv.id, "pathVote", { ...pv.data, picks: { ...pv.data.picks, [c.uid]: pick } }, "project", p.id, pv.ownerId, pv);
+      return { id: pv.id };
+    }
+    case "closePathVote": {
+      const p = await project(c, cmd.projectId);
+      const pv = await optional(c, cmd.pathId, "pathVote");
+      if (!pv || pv.projectId !== p.id) fail("이 프로젝트의 투표가 아닙니다.");
+      if (pv.data.state !== "open") fail("열려 있는 팀·개별 투표가 없습니다.");
+      const timeUp = !!pv.data.endsAt && pv.data.endsAt <= c.now;
+      if (p.leaderId !== c.uid && !timeUp) fail("팀장이 확정할 수 있습니다.", 403);
+      const picks = Object.values(pv.data.picks), abstained = Math.max(0, p.memberIds.length - picks.length);
+      write(c, pv.id, "pathVote", { ...pv.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual" }, "project", p.id, pv.ownerId, pv);
+      event(c, "팀·개별 투표 마감", "팀 " + picks.filter((x) => x.choice === "team").length + "명 · 개별 " + picks.filter((x) => x.choice === "solo").length + "명 · 기권 " + abstained + "명", p.id, p.id);
+      return { id: pv.id };
     }
     case "projectAccess": {
       const p = await c.store.read<Project>(path(c, "projects/" + cmd.projectId));
