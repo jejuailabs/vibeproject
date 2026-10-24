@@ -89,7 +89,10 @@ export function ProjectSteps(p: StepsProps) {
   useEffect(() => { if (selectedVoteId && !vote) { setSelectedVoteId(null); setVoteBoard(false); } }, [selectedVoteId, vote]);
 
   const myBallot = vote && recordsOf(p, "teamBallot").find((x) => x.projectId === team.id && x.ownerId === me.id && x.data.round === vote.data.round && (x.data.voteId === vote.id || (!x.data.voteId && vote.id === "teamvote-" + team.id)));
-  const myPicks = myBallot ? myBallot.data.ideaIds ?? (myBallot.data.ideaId ? [myBallot.data.ideaId] : []) : [];
+  const savedPicks = myBallot ? myBallot.data.ideaIds ?? (myBallot.data.ideaId ? [myBallot.data.ideaId] : []) : [];
+  // A pick shows right away while it saves; a failed save drops it and the saved picks show again.
+  const [optimistic, setOptimistic] = useState<{ voteId: string; picks: string[] } | null>(null);
+  const myPicks = optimistic && optimistic.voteId === vote?.id ? optimistic.picks : savedPicks;
   const maxVotes = vote?.data.maxVotes || 1;
   const [voteLimit, setVoteLimit] = useState(1);
   const chats = w.messages.filter((m) => m.channel === team.id).length;
@@ -157,7 +160,14 @@ export function ProjectSteps(p: StepsProps) {
     await p.saveIdea({ type: "deleteIdea", id: i.id, revision: i.revision });
   }
   function openCard(i: Idea) { if (step && step !== "thought" && canContinue(i)) continueAt(step, i); else p.onIdea(i.id); }
-  const castVote = (ideaId: string) => vote && p.run({ type: "castTeamVote", projectId: team.id, voteId: vote.id, ideaId });
+  async function castVote(ideaId: string) {
+    if (!vote) return;
+    // Same rule as the server: picking a chosen card takes it back; with one vote a new pick replaces the old one.
+    const picks = myPicks.includes(ideaId) ? myPicks.filter((id) => id !== ideaId) : myPicks.length < maxVotes ? [...myPicks, ideaId] : maxVotes === 1 ? [ideaId] : myPicks;
+    setOptimistic({ voteId: vote.id, picks });
+    await p.run({ type: "castTeamVote", projectId: team.id, voteId: vote.id, ideaId });
+    setOptimistic(null);
+  }
   function openVoteBoard(voteId: string | null) {
     setSelectedVoteId(voteId); setPick(""); setReason(""); setDetailId(null); setVoteBoard(true);
   }
