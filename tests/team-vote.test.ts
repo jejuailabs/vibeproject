@@ -74,6 +74,23 @@ test('the leader picks which finished cards go on the vote',async()=>{
  assert.equal(s.workspace.ideas.find(i=>i.id==='c2')!.refinement?.ready,true);
 });
 
+test('a timed vote refuses late ballots, then any member may close it and non-voters abstain',async()=>{
+ const w=previewWorkspace();
+ const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id:'d1',ownerId:'seo',projectId:'p-onboarding',scope:'project'});w.ideas.push(c);
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',minutes:10});
+ const ends=Date.parse(vote(s)!.data.endsAt!)-Date.parse(vote(s)!.data.openedAt);
+ assert.equal(ends,10*60000);
+ s=await run(s,'jun',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'d1'});
+ // Before the deadline only the leader may close it.
+ await assert.rejects(run(s,'seo',{type:'closeTeamVote',projectId:'p-onboarding'}),/팀장/);
+ vote(s)!.data.endsAt=new Date(Date.now()-1000).toISOString();
+ await assert.rejects(run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'d1'}),/시간이 끝났/);
+ s=await run(s,'seo',{type:'closeTeamVote',projectId:'p-onboarding'});
+ const members=s.workspace.projects.find(p=>p.id==='p-onboarding')!.memberIds.length;
+ assert.equal(vote(s)!.data.state,'closed');assert.equal(vote(s)!.data.endedBy,'time');assert.equal(vote(s)!.data.abstained,members-1);
+});
+
 test('the leader adds cards finished after the vote opened, and can cancel the vote to start over',async()=>{
  const w=previewWorkspace();
  const make=(id:string,owner:string)=>{const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project'});return c;};

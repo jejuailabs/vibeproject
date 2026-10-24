@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, ChevronDown, Crown, MessageCircle, Pencil, Plus, Sparkles, Trash2, Vote, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronDown, Crown, MessageCircle, Pencil, Plus, Sparkles, Trash2, Vote, X } from "lucide-react";
 import { IdeaRefinement } from "./idea-refinement";
 import { characterFor } from "@/lib/characters";
 import { canReadIdea } from "@/lib/policy";
@@ -46,6 +46,8 @@ function Avatar({ member }: { member?: Member }) {
 function reached(step: StepKey, i: Idea) {
   return step === "definition" ? answered(i.refinement) === questionFields.length : true;
 }
+const voteTimes = [0, 3, 5, 10, 15, 20, 30, 60];
+const clock = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
 function cardDone(step: StepKey, i: Idea) {
   return step === "thought" ? true : step === "questions" ? answered(i.refinement) === questionFields.length : !!i.refinement?.ready;
 }
@@ -94,7 +96,18 @@ export function ProjectSteps(p: StepsProps) {
   const [optimistic, setOptimistic] = useState<{ voteId: string; picks: string[] } | null>(null);
   const myPicks = optimistic && optimistic.voteId === vote?.id ? optimistic.picks : savedPicks;
   const maxVotes = vote?.data.maxVotes || 1;
-  const [voteLimit, setVoteLimit] = useState(1);
+  const [voteLimit, setVoteLimit] = useState(1), [voteMinutes, setVoteMinutes] = useState(10);
+  // A timed vote ticks every second; past its deadline nobody can vote, and the opener's screen closes it.
+  const [now, setNow] = useState(() => Date.now());
+  const timed = step === "confirm" && votes.some((v) => v.data.state === "open" && v.data.endsAt);
+  useEffect(() => { if (!timed) return; setNow(Date.now()); const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [timed]);
+  const timeUp = (v: (typeof votes)[number]) => v.data.state === "open" && !!v.data.endsAt && Date.parse(v.data.endsAt) <= now;
+  const closing = useRef(new Set<string>());
+  const { run } = p;
+  useEffect(() => {
+    for (const v of votes) if (timeUp(v) && v.ownerId === me.id && !closing.current.has(v.id)) { closing.current.add(v.id); void run({ type: "closeTeamVote", projectId: team.id, voteId: v.id }); }
+  });
+  const voteOpen = vote?.data.state === "open" && !timeUp(vote);
   const chats = w.messages.filter((m) => m.channel === team.id).length;
   const ended = recordsOf(p, "settings")[0]?.data.state === "completed";
   const commentCount = (id: string) => w.comments.filter((c) => c.ideaId === id).length;
@@ -175,10 +188,14 @@ export function ProjectSteps(p: StepsProps) {
   const [picking, setPicking] = useState(false), [chosen, setChosen] = useState<string[]>([]), pickerRef = useRef<HTMLDialogElement>(null);
   const picked = problems.filter((i) => chosen.includes(i.id));
   useEffect(() => { const d = pickerRef.current; if (!d) return; if (picking && !d.open) d.showModal(); else if (!picking && d.open) d.close(); }, [picking]);
+  // Live vote dashboard, only for the person who opened that vote.
+  const [dashId, setDashId] = useState<string | null>(null), dashRef = useRef<HTMLDialogElement>(null);
+  const dash = votes.find((v) => v.id === dashId && v.ownerId === me.id);
+  useEffect(() => { const d = dashRef.current; if (!d) return; if (dash && !d.open) d.showModal(); else if (!dash && d.open) d.close(); }, [dash]);
   function startPicking() { setChosen(problems.map((i) => i.id)); setPicking(true); }
   async function openNewVote() {
     if (!picked.length) return;
-    if (await p.run({ type: "openTeamVote", projectId: team.id, candidateIds: picked.map((i) => i.id), maxVotes: Math.min(voteLimit, picked.length) })) {
+    if (await p.run({ type: "openTeamVote", projectId: team.id, candidateIds: picked.map((i) => i.id), maxVotes: Math.min(voteLimit, picked.length), ...(voteMinutes ? { minutes: voteMinutes } : {}) })) {
       setPicking(false); setSelectedVoteId(null); setPick(""); setReason(""); setVoteBoard(false);
     }
   }
@@ -188,7 +205,7 @@ export function ProjectSteps(p: StepsProps) {
   useEffect(() => { const d = detailRef.current; if (!d) return; if (detail && !d.open) d.showModal(); else if (!detail && d.open) d.close(); }, [detail]);
   function cardAction(i: Idea) {
     if (ended) return null;
-    if (vote?.data.state === "open" && vote.data.candidateIds.includes(i.id)) {
+    if (vote && voteOpen && vote.data.candidateIds.includes(i.id)) {
       const mineVote = myPicks.includes(i.id), full = !mineVote && maxVotes > 1 && myPicks.length >= maxVotes;
       return <button type="button" className={mineVote ? "primary-button" : "secondary-button vote-btn"} disabled={p.busy || full} title={full ? "고른 카드 하나를 먼저 취소해주세요." : undefined} onClick={(e) => { e.stopPropagation(); castVote(i.id); }}>{mineVote ? <><Check size={14} /> 내 선택 · 취소</> : full ? "표를 다 썼어요" : <><Vote size={14} /> 투표</>}</button>;
     }
@@ -314,13 +331,14 @@ export function ProjectSteps(p: StepsProps) {
           {votes.map((room) => {
             const roomTop = problems.filter((i) => room.data.candidateIds.includes(i.id)).sort((a, b) => (room.data.counts[b.id] || 0) - (room.data.counts[a.id] || 0))[0];
             return <article key={room.id} className={"vote-card " + room.data.state}>
-              <span className="vote-card-state">{room.data.state === "open" ? "투표 중" : room.data.state === "closed" ? "투표 마감" : "투표 취소됨"}</span>
+              <span className="vote-card-state">{timeUp(room) ? "시간 종료" : room.data.state === "open" ? "투표 중" + (room.data.endsAt ? " · " + clock(Date.parse(room.data.endsAt) - now) + " 남음" : "") : room.data.state === "closed" ? "투표 마감" : "투표 취소됨"}</span>
               <h3>{room.data.round}번째 투표</h3>
-              <p>후보 문제 카드 <b>{room.data.candidateIds.length}장</b> · {room.data.voters}/{members.length}명 참여 · 한 사람당 {room.data.maxVotes || 1}표</p>
+              <p>후보 문제 카드 <b>{room.data.candidateIds.length}장</b> · {room.data.voters}/{members.length}명 참여 · 한 사람당 {room.data.maxVotes || 1}표{room.data.state === "closed" && room.data.abstained !== undefined ? " · 기권 " + room.data.abstained + "명" : ""}</p>
               <small>{new Date(room.data.openedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })} 열림{room.data.closedAt ? " · " + new Date(room.data.closedAt).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) + (room.data.state === "cancelled" ? " 취소" : " 마감") : ""}</small>
               {room.data.state === "closed" && roomTop && (room.data.counts[roomTop.id] || 0) > 0 && <blockquote><Crown size={13} /> {room.data.counts[roomTop.id]}표 · {statement(roomTop.refinement!)}</blockquote>}
               <div className="vote-card-actions">
                 <button type="button" className="primary-button" onClick={() => openVoteBoard(room.id)}>{room.data.state === "open" ? "투표하러 가기" : "카드·결과 보기"} <ArrowRight size={15} /></button>
+                {room.ownerId === me.id && room.data.state !== "cancelled" && <button type="button" className="secondary-button" onClick={() => setDashId(room.id)}><BarChart3 size={14} /> 대시보드</button>}
                 {leader && !ended && <button type="button" className="secondary-button danger" disabled={p.busy} onClick={() => { if (window.confirm(room.data.round + "번째 투표를 지울까요? 받은 표도 함께 사라지고 되돌릴 수 없어요.")) p.run({ type: "deleteTeamVote", projectId: team.id, voteId: room.id }); }}><Trash2 size={14} /> 투표 삭제</button>}
               </div>
             </article>;
@@ -349,7 +367,7 @@ export function ProjectSteps(p: StepsProps) {
       {step === "confirm" && voteBoard && (
         <>
           <button type="button" className="text-button vote-back" onClick={() => setVoteBoard(false)}><ArrowLeft size={14} /> 투표 목록</button>
-          {vote && <h3>{vote.data.round}번째 투표</h3>}
+          {vote && <h3 className="vote-board-title">{vote.data.round}번째 투표{vote.ownerId === me.id && vote.data.state !== "cancelled" && <button type="button" className="secondary-button" onClick={() => setDashId(vote.id)}><BarChart3 size={14} /> 대시보드</button>}</h3>}
           <div className="pj-vote">
             {team.confirmedProblem ? (
               <div className="steps-confirmed">
@@ -358,8 +376,10 @@ export function ProjectSteps(p: StepsProps) {
                 <small>{w.members.find((m) => m.id === team.confirmedProblem!.ownerId)?.name}님의 카드 · 이유: {team.confirmedProblem.reason}</small>
                 <p className="pj-md">이 카드가 기획 문서 <b>문제와 사용자(product.md)</b>로 저장됐어요. <button type="button" className="primary-button" onClick={() => p.onNavigate("studio", "product", "project-docs")}>md 문서 보기 <ArrowUpRight size={14} /></button></p>
               </div>
+            ) : vote && timeUp(vote) ? (
+              <p><Check size={16} /> <strong>투표 시간 종료</strong> · 결과를 모으고 있어요.</p>
             ) : vote?.data.state === "open" ? (
-              <p><Vote size={16} /> <strong>투표 중</strong> · {vote.data.voters}/{members.length}명 참여 · 한 사람당 <strong>{maxVotes}표</strong> · 내가 고른 카드 {myPicks.length}/{maxVotes} · 다시 누르면 취소돼요.{fresh.length > 0 && <> · 후보가 아닌 완성 카드 {fresh.length}개{leader ? "" : " (리더가 추가하면 고를 수 있어요)"}</>}</p>
+              <p><Vote size={16} /> <strong>투표 중</strong>{vote.data.endsAt && <> · 남은 시간 <strong>{clock(Date.parse(vote.data.endsAt) - now)}</strong></>} · {vote.data.voters}/{members.length}명 참여 · 한 사람당 <strong>{maxVotes}표</strong> · 내가 고른 카드 {myPicks.length}/{maxVotes} · 다시 누르면 취소돼요.{fresh.length > 0 && <> · 후보가 아닌 완성 카드 {fresh.length}개{leader ? "" : " (리더가 추가하면 고를 수 있어요)"}</>}</p>
             ) : vote?.data.state === "closed" ? (
               <p><Check size={16} /> <strong>투표 마감</strong> · {vote.data.voters}명 참여 · {leader ? "가장 많이 받은 카드를 골라 두었어요. 이유를 적고 확정하세요." : "리더가 결과를 보고 문제를 확정합니다."}</p>
             ) : (
@@ -499,12 +519,58 @@ export function ProjectSteps(p: StepsProps) {
               ))}
             </ul>
             <div className="vote-detail-actions">
+              <label>투표 시간 <select aria-label="새 투표의 투표 시간" value={voteMinutes} onChange={(e) => setVoteMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{m ? m + "분" : "제한 없음"}</option>)}</select></label>
               <label>한 사람당 <select aria-label="새 투표의 한 사람당 투표 수" value={Math.min(voteLimit, Math.max(1, picked.length))} onChange={(e) => setVoteLimit(Number(e.target.value))} disabled={p.busy || !picked.length}>{Array.from({ length: Math.max(1, Math.min(10, picked.length)) }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}표</option>)}</select></label>
               <button type="button" className="secondary-button" onClick={() => setPicking(false)}>취소</button>
               <button type="button" className="primary-button" disabled={p.busy || !picked.length} onClick={openNewVote}><Vote size={15} /> {picked.length}장으로 투표 시작</button>
             </div>
           </>
         )}
+      </dialog>
+
+      <dialog ref={dashRef} className="vote-dash" aria-label="투표 대시보드" onCancel={() => setDashId(null)} onClose={() => setDashId(null)}>
+        {dash && (() => {
+          const d = dash.data, max = d.maxVotes || 1, possible = members.length * max;
+          const cast = d.candidateIds.reduce((n, id) => n + (d.counts[id] || 0), 0);
+          const live = d.state === "open" && !timeUp(dash);
+          const rows = cards.filter((i) => d.candidateIds.includes(i.id)).map((i) => ({ i, n: d.counts[i.id] || 0 })).sort((a, b) => b.n - a.n);
+          return (
+            <>
+              <header className="vote-dash-head">
+                <div><span>{d.round}번째 투표 · {live ? "실시간 현황" : "투표 종료"}</span><h2>투표 대시보드</h2></div>
+                <button type="button" className="icon-button" aria-label="닫기" onClick={() => setDashId(null)}><X size={22} /></button>
+              </header>
+              <div className="vote-dash-top">
+                <div className="vote-dash-stat"><small>투표된 표</small><strong>{cast}<em>/{possible}표</em></strong><span>남은 표 {Math.max(0, possible - cast)}표</span></div>
+                <div className={"vote-dash-clock" + (live && d.endsAt && Date.parse(d.endsAt) - now < 60000 ? " soon" : "")} role="timer" aria-label="남은 시간">
+                  <small>{live ? (d.endsAt ? "남은 시간" : "시간 제한 없음") : "투표 종료"}</small>
+                  <strong>{live ? (d.endsAt ? clock(Date.parse(d.endsAt) - now) : "--:--") : "00:00"}</strong>
+                  <span>{live ? "한 사람당 " + max + "표" : d.endedBy === "time" ? "시간이 다 되어 끝났어요" : timeUp(dash) ? "결과를 모으고 있어요" : "직접 마감했어요"}</span>
+                </div>
+                <div className="vote-dash-stat"><small>참여한 사람</small><strong>{d.voters}<em>/{members.length}명</em></strong><span>{live ? "아직 " + Math.max(0, members.length - d.voters) + "명" : "기권 " + (d.abstained ?? Math.max(0, members.length - d.voters)) + "명"}</span></div>
+              </div>
+              <ol className="vote-dash-bars">
+                {rows.map(({ i, n }, k) => {
+                  const pct = cast ? Math.round((n / cast) * 1000) / 10 : 0, rank = rows.filter((r) => r.n > n).length + 1;
+                  return (
+                    <li key={i.id} className={rank === 1 && n > 0 ? "lead" : ""} style={{ ["--accent" as string]: accents[k % accents.length] }}>
+                      <span className="vote-dash-rank">{rank}</span>
+                      <div className="vote-dash-bar">
+                        <p><strong>{i.title}</strong><b>{pct}%</b><em>{n}표</em></p>
+                        <div className="vote-dash-track"><i style={{ width: pct + "%" }} /></div>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ol>
+              {d.state === "open" && !ended && (
+                <footer className="vote-dash-foot">
+                  <button type="button" className="primary-button" disabled={p.busy} onClick={() => { if (window.confirm("지금 투표를 마감할까요? 아직 투표하지 않은 사람은 기권으로 처리돼요.")) p.run({ type: "closeTeamVote", projectId: team.id, voteId: dash.id }); }}>투표 종료</button>
+                </footer>
+              )}
+            </>
+          );
+        })()}
       </dialog>
 
       {/* Writing window: the form, the AI coach and the wall preview for the current step. */}

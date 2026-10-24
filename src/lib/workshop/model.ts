@@ -128,7 +128,9 @@ export interface DataMap {
   round: VoteData;
   ballot: { roundId: string; candidateIds: string[] };
   // A project's own vote among its members' problem cards; the leader opens and closes it, then confirms a problem.
-  teamVote: { round: number; state: "open" | "closed" | "cancelled" | "deleted"; candidateIds: string[]; counts: Record<string, number>; voters: number; openedAt: string; closedAt: string | null; maxVotes?: number };
+  teamVote: { round: number; state: "open" | "closed" | "cancelled" | "deleted"; candidateIds: string[]; counts: Record<string, number>; voters: number; openedAt: string; closedAt: string | null; maxVotes?: number;
+    // endsAt is the voting deadline; whoever has not voted by the close counts as abstained.
+    endsAt?: string | null; abstained?: number; endedBy?: "time" | "manual" };
   // ideaId is the single pick of votes opened before multi-vote; ideaIds holds every pick.
   teamBallot: { round: number; voteId?: string; ideaId?: string; ideaIds?: string[] };
   project: ProjectData;

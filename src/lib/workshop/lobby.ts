@@ -237,7 +237,8 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       const round = Math.max(counter?.round || 0, ...votes.map((v) => v.data.round)) + 1;
       const id = "teamvote-" + c.requestId;
       const maxVotes = Math.min(cmd.maxVotes || 1, ideas.length);
-      write(c, id, "teamVote", { round, state: "open", candidateIds: ideas.map((i) => i.id), counts: {}, voters: 0, openedAt: c.now, closedAt: null, maxVotes }, "project", p.id);
+      const endsAt = cmd.minutes ? new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString() : null;
+      write(c, id, "teamVote", { round, state: "open", candidateIds: ideas.map((i) => i.id), counts: {}, voters: 0, openedAt: c.now, closedAt: null, maxVotes, endsAt }, "project", p.id);
       c.store.write(counterPath, { round });
       event(c, "투표 열기", "문제 카드 " + ideas.length + "개 · 1인당 " + maxVotes + "표", p.id, p.id);
       for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "리더가 함께 풀 문제 투표를 열었습니다.", p.id, "project");
@@ -247,6 +248,7 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       const p = await project(c, cmd.projectId);
       const vote = await teamVote(c, p.id, cmd.voteId);
       if (vote?.data.state !== "open") fail("열려 있는 투표가 없습니다.");
+      if (vote.data.endsAt && vote.data.endsAt <= c.now) fail("투표 시간이 끝났습니다.");
       if (!vote.data.candidateIds.includes(cmd.ideaId)) fail("투표 후보 카드만 고를 수 있습니다.");
       const ballotId = vote.id === "teamvote-" + p.id
         ? "teamballot-" + p.id + "-" + c.uid
@@ -297,11 +299,15 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       return { id: p.id };
     }
     case "closeTeamVote": {
-      const p = await project(c, cmd.projectId, "leader");
+      // The leader closes any time; once the deadline passes any member's screen may close it.
+      const p = await project(c, cmd.projectId);
       const vote = await teamVote(c, p.id, cmd.voteId);
       if (vote?.data.state !== "open") fail("열려 있는 투표가 없습니다.");
-      write(c, vote.id, "teamVote", { ...vote.data, state: "closed", closedAt: c.now }, "project", p.id, vote.ownerId, vote);
-      event(c, "투표 마감", vote.data.voters + "명 참여", p.id, p.id);
+      const timeUp = !!vote.data.endsAt && vote.data.endsAt <= c.now;
+      if (p.leaderId !== c.uid && !timeUp) fail("팀장이 확정할 수 있습니다.", 403);
+      const abstained = Math.max(0, p.memberIds.length - vote.data.voters);
+      write(c, vote.id, "teamVote", { ...vote.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual" }, "project", p.id, vote.ownerId, vote);
+      event(c, "투표 마감", vote.data.voters + "명 참여 · 기권 " + abstained + "명" + (timeUp ? " · 시간 종료" : ""), p.id, p.id);
       return { id: p.id };
     }
     case "projectAccess": {

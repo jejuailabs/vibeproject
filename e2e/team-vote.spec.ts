@@ -42,6 +42,16 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await firstCard().getByRole('button', { name: '투표', exact: true }).click();
   await expect(page.locator('.pj-vote')).toContainText('내가 고른 카드 1/1');
   await page.getByRole('button', { name: '투표 목록', exact: true }).click();
+  // The opener sees the live dashboard: votes cast, people who voted, a countdown and share bars.
+  await room(1).getByRole('button', { name: '대시보드', exact: true }).click();
+  const dash = page.getByRole('dialog', { name: '투표 대시보드', exact: true });
+  await expect(dash.locator('.vote-dash-stat').nth(0)).toContainText('1/2표');
+  await expect(dash.locator('.vote-dash-stat').nth(1)).toContainText('1/2명');
+  await expect(dash.getByRole('timer')).toContainText(/0?9:\d\d|10:00/);
+  await expect(dash.locator('.vote-dash-bars li').first()).toContainText('100%');
+  await page.screenshot({ path: 'work/team-vote-dashboard-desktop.png' });
+  await dash.getByRole('button', { name: '닫기', exact: true }).click();
+  await expect(dash).not.toBeVisible();
 
   await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
   await picker.getByLabel('새 투표의 한 사람당 투표 수').selectOption('2');
