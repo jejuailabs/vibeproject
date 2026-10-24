@@ -13,6 +13,8 @@ import {
   saveProject,
   joinMembership,
   activateMembership,
+  addMembership,
+  member,
   project,
   idea,
   ideaHistory,
@@ -359,6 +361,83 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       write(c, pv.id, "pathVote", { ...pv.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual" }, "project", p.id, pv.ownerId, pv);
       event(c, "팀·개별 투표 마감", "팀 " + picks.filter((x) => x.choice === "team").length + "명 · 개별 " + picks.filter((x) => x.choice === "solo").length + "명 · 기권 " + abstained + "명", p.id, p.id);
       return { id: pv.id };
+    }
+    case "openJoinBoard": {
+      // The board lists the main vote's top 5 and every solo card; solo choosers start in their own project.
+      const p = await project(c, cmd.projectId, "leader");
+      const pv = await optional(c, cmd.pathId, "pathVote");
+      if (!pv || pv.projectId !== p.id) fail("이 프로젝트의 투표가 아닙니다.");
+      if (pv.data.state !== "closed") fail("팀·개별 투표를 먼저 마감해주세요.");
+      const id = "joinboard-" + pv.id;
+      if (await optional(c, id, "joinBoard")) fail("이 투표의 참가 받기는 이미 시작했습니다.");
+      const vote = await teamVote(c, p.id, pv.data.voteId);
+      const ready = await voteCards(c, p);
+      const option = (i: Idea) => ({ ideaId: i.id, title: i.title, problem: i.refinement ? statement(i.refinement) : i.title, ownerId: i.ownerId });
+      const options: RecordOf<"joinBoard">["data"]["options"] = [];
+      for (const t of vote?.data.top || []) { const i = ready.find((x) => x.id === t.ideaId); if (i) options.push({ ...option(i), rank: t.rank }); }
+      const picks: RecordOf<"joinBoard">["data"]["picks"] = {};
+      for (const [uid, x] of Object.entries(pv.data.picks)) {
+        if (x.choice !== "solo" || !x.ideaId) continue;
+        let o = options.find((y) => y.ideaId === x.ideaId);
+        if (!o) { const i = ready.find((y) => y.id === x.ideaId); if (!i) continue; o = option(i); options.push(o); }
+        Object.assign(o, { soloId: uid, soloNick: x.nickname });
+        picks[uid] = { ideaId: o.ideaId, at: c.now };
+      }
+      if (!options.length) fail("참가할 프로젝트가 없습니다. 1~5등 카드나 개별 프로젝트가 있어야 해요.");
+      const endsAt = cmd.minutes ? new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString() : null;
+      write(c, id, "joinBoard", { pathId: pv.id, voteId: pv.data.voteId, round: pv.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, capacity: cmd.capacity, options, picks }, "project", p.id);
+      event(c, "프로젝트 참가 받기", "프로젝트 " + options.length + "개 · 정원 " + cmd.capacity + "명", p.id, p.id);
+      for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "참가할 프로젝트를 골라주세요.", p.id, "project");
+      return { id };
+    }
+    case "pickJoin": {
+      // Picking the project I am in again takes me out; solo choosers stay in their own project.
+      const p = await project(c, cmd.projectId);
+      const jb = await optional(c, cmd.boardId, "joinBoard");
+      if (!jb || jb.projectId !== p.id) fail("이 프로젝트의 참가 게시판이 아닙니다.");
+      if (jb.data.state !== "open") fail("참가 받기가 마감되었습니다.");
+      if (jb.data.endsAt && jb.data.endsAt <= c.now) fail("참가 시간이 끝났습니다.");
+      if (!jb.data.options.some((o) => o.ideaId === cmd.ideaId)) fail("게시판에 있는 프로젝트만 고를 수 있습니다.");
+      if (jb.data.options.some((o) => o.soloId === c.uid)) fail("개별로 고른 사람은 자기 프로젝트에 참가해 있어요.");
+      const picks = { ...jb.data.picks };
+      if (picks[c.uid]?.ideaId === cmd.ideaId) delete picks[c.uid];
+      else {
+        const taken = Object.entries(picks).filter(([uid, x]) => x.ideaId === cmd.ideaId && uid !== c.uid).length;
+        if (taken >= jb.data.capacity) fail("정원이 가득 찼습니다.");
+        picks[c.uid] = { ideaId: cmd.ideaId, at: c.now };
+      }
+      write(c, jb.id, "joinBoard", { ...jb.data, picks }, "project", p.id, jb.ownerId, jb);
+      return { id: jb.id };
+    }
+    case "closeJoinBoard": {
+      // Each project with at least one member becomes a real project; the card's author leads it if they joined, else the earliest joiner.
+      const p = await project(c, cmd.projectId);
+      const jb = await optional(c, cmd.boardId, "joinBoard");
+      if (!jb || jb.projectId !== p.id) fail("이 프로젝트의 참가 게시판이 아닙니다.");
+      if (jb.data.state !== "open") fail("열려 있는 참가 받기가 없습니다.");
+      const timeUp = !!jb.data.endsAt && jb.data.endsAt <= c.now;
+      if (p.leaderId !== c.uid && !timeUp) fail("팀장이 확정할 수 있습니다.", 403);
+      const projects: Record<string, string> = {};
+      let n = 0;
+      for (const o of jb.data.options) {
+        const joined = Object.entries(jb.data.picks).filter(([, x]) => x.ideaId === o.ideaId).sort((a, b) => a[1].at.localeCompare(b[1].at)).map(([uid]) => uid);
+        if (!joined.length) continue;
+        const leaderId = joined.includes(o.ownerId) ? o.ownerId : joined[0];
+        const id = "p-" + c.requestId + "-" + ++n;
+        saveProject(c, { id, name: o.title.slice(0, 60), problem: o.problem, intro: o.problem, leaderId, memberIds: joined, sourceIdeaId: o.ideaId, stage: "팀 구성", createdAt: c.now, mode: "team", capacity: jb.data.capacity, joinPolicy: "request" });
+        write(c, "project-" + id, "project", { mode: "team", capacity: jb.data.capacity, stage: "forming", baselineId: null, repositoryUrl: "", deployUrl: "", firebaseUrl: "", inviteCode: randomHex(16) }, "project", id);
+        for (const uid of joined) {
+          addMembership(c, await member(c, uid), id);
+          c.store.write(path(c, "projects/" + id + "/members/" + uid), { role: uid === leaderId ? "leader" : "member", status: "active", acceptedAt: c.now });
+          notify(c, uid, "\"" + o.title.slice(0, 40) + "\" 프로젝트에 배정됐어요.", id, "project");
+        }
+        event(c, "프로젝트 시작", o.title + " · " + joined.length + "명", id, id);
+        projects[o.ideaId] = id;
+      }
+      const unassigned = p.memberIds.filter((uid) => !jb.data.picks[uid]);
+      write(c, jb.id, "joinBoard", { ...jb.data, state: "closed", closedAt: c.now, endedBy: timeUp ? "time" : "manual", projects, unassigned }, "project", p.id, jb.ownerId, jb);
+      event(c, "프로젝트 참가 마감", "프로젝트 " + n + "개 · 미배정 " + unassigned.length + "명", p.id, p.id);
+      return { id: jb.id };
     }
     case "projectAccess": {
       const p = await c.store.read<Project>(path(c, "projects/" + cmd.projectId));

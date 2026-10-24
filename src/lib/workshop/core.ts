@@ -234,6 +234,10 @@ function membership(c: Context, m: Member, projectId: string | null, projectIds:
 export function joinMembership(c: Context, m: Member, projectId: string) {
   membership(c, m, projectId, [...new Set([...projectIdsOf(m), projectId])]);
 }
+// Adds a project to someone's list without changing the project they are working in now.
+export function addMembership(c: Context, m: Member, projectId: string) {
+  membership(c, m, m.projectId ?? projectId, [...new Set([...projectIdsOf(m), projectId])]);
+}
 export function leaveMembership(c: Context, m: Member, projectId: string) {
   const rest = projectIdsOf(m).filter((id) => id !== projectId);
   membership(c, m, m.projectId === projectId ? rest[0] || null : m.projectId, rest);

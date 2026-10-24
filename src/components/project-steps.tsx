@@ -103,7 +103,10 @@ export function ProjectSteps(p: StepsProps) {
   // Team-or-solo votes that follow a closed main vote, one per main vote.
   const paths = recordsOf(p, "pathVote").filter((x) => x.projectId === team.id);
   const pathOf = (voteId: string) => paths.find((x) => x.data.voteId === voteId);
-  const timed = step === "confirm" && [...votes, ...paths].some((v) => v.data.state === "open" && v.data.endsAt);
+  // Project join boards that follow a closed team-or-solo vote.
+  const boards = recordsOf(p, "joinBoard").filter((x) => x.projectId === team.id);
+  const boardOf = (pathId: string) => boards.find((x) => x.data.pathId === pathId);
+  const timed = step === "confirm" && [...votes, ...paths, ...boards].some((v) => v.data.state === "open" && v.data.endsAt);
   useEffect(() => { if (!timed) return; setNow(Date.now()); const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [timed]);
   const timeUp = (v: { data: { state: string; endsAt?: string | null } }) => v.data.state === "open" && !!v.data.endsAt && Date.parse(v.data.endsAt) <= now;
   const closing = useRef(new Set<string>());
@@ -111,6 +114,7 @@ export function ProjectSteps(p: StepsProps) {
   useEffect(() => {
     for (const v of votes) if (timeUp(v) && v.ownerId === me.id && !closing.current.has(v.id)) { closing.current.add(v.id); void run({ type: "closeTeamVote", projectId: team.id, voteId: v.id }); }
     for (const v of paths) if (timeUp(v) && v.ownerId === me.id && !closing.current.has(v.id)) { closing.current.add(v.id); void run({ type: "closePathVote", projectId: team.id, pathId: v.id }); }
+    for (const v of boards) if (timeUp(v) && v.ownerId === me.id && !closing.current.has(v.id)) { closing.current.add(v.id); void run({ type: "closeJoinBoard", projectId: team.id, boardId: v.id }); }
   });
   const voteOpen = vote?.data.state === "open" && !timeUp(vote);
   const chats = w.messages.filter((m) => m.channel === team.id).length;
@@ -213,6 +217,16 @@ export function ProjectSteps(p: StepsProps) {
   function submitPath() {
     if (pathView && choice) void p.run({ type: "pickPath", projectId: team.id, pathId: pathView.id, nickname: nick.trim(), choice, ...(choice === "solo" ? { ideaId: soloIdea } : {}) });
   }
+  // Join board window: everyone sees the chosen projects and joins one; the opener closes it to make the real projects.
+  const [boardId, setBoardId] = useState<string | null>(null), boardRef = useRef<HTMLDialogElement>(null);
+  const boardView = boards.find((x) => x.id === boardId);
+  useEffect(() => { const d = boardRef.current; if (!d) return; if (boardView && !d.open) d.showModal(); else if (!boardView && d.open) d.close(); }, [boardView]);
+  const [boardCap, setBoardCap] = useState(5), [boardMinutes, setBoardMinutes] = useState(10);
+  async function startBoard(pathId: string) {
+    if (await p.run({ type: "openJoinBoard", projectId: team.id, pathId, capacity: boardCap, ...(boardMinutes ? { minutes: boardMinutes } : {}) })) setBoardId("joinboard-" + pathId);
+  }
+  // On the board people show by their team-or-solo nickname, else their account name.
+  const nameOn = (b: (typeof boards)[number], uid: string) => paths.find((x) => x.id === b.data.pathId)?.data.picks[uid]?.nickname || w.members.find((m) => m.id === uid)?.name || "팀원";
   // "PDF로 저장" prints only the report, copied straight under <body>; the browser's print window saves it as PDF.
   const [printing, setPrinting] = useState(false);
   useEffect(() => {
@@ -443,7 +457,18 @@ export function ProjectSteps(p: StepsProps) {
                 {room.ownerId === me.id && room.data.state !== "cancelled" && <button type="button" className="secondary-button" onClick={() => setDashId(room.id)}><BarChart3 size={14} /> 대시보드</button>}
                 {room.data.state === "closed" && (() => {
                   const pv = pathOf(room.id);
-                  if (pv) return <button type="button" className="secondary-button path-open" onClick={() => openPath(pv.id)}><Users size={14} /> {pv.data.state === "open" && !timeUp(pv) ? "팀·개별 고르기" + (pv.data.endsAt ? " · " + clock(Date.parse(pv.data.endsAt) - now) : "") : "팀·개별 결과"}</button>;
+                  if (pv) {
+                    const jb = boardOf(pv.id);
+                    return <>
+                      <button type="button" className="secondary-button path-open" onClick={() => openPath(pv.id)}><Users size={14} /> {pv.data.state === "open" && !timeUp(pv) ? "팀·개별 고르기" + (pv.data.endsAt ? " · " + clock(Date.parse(pv.data.endsAt) - now) : "") : "팀·개별 결과"}</button>
+                      {jb ? <button type="button" className="primary-button" onClick={() => setBoardId(jb.id)}><Crown size={14} /> {jb.data.state === "open" && !timeUp(jb) ? "선정 프로젝트 참가하기" + (jb.data.endsAt ? " · " + clock(Date.parse(jb.data.endsAt) - now) : "") : "프로젝트 배정 결과"}</button>
+                        : pv.data.state === "closed" && leader && !ended && <span className="path-start">
+                          <label>정원 <input type="number" min={1} max={100} value={boardCap} onChange={(e) => setBoardCap(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} aria-label="프로젝트 정원" />명</label>
+                          <select aria-label="참가 받기 시간" value={boardMinutes} onChange={(e) => setBoardMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{m ? m + "분" : "제한 없음"}</option>)}</select>
+                          <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startBoard(pv.id)}><Crown size={14} /> 프로젝트 참가 받기</button>
+                        </span>}
+                    </>;
+                  }
                   if (!leader || ended) return null;
                   return <span className="path-start">
                     <select aria-label="팀·개별 투표 시간" value={pathMinutes} onChange={(e) => setPathMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{m ? m + "분" : "제한 없음"}</option>)}</select>
@@ -711,6 +736,50 @@ export function ProjectSteps(p: StepsProps) {
               {opener && d.state === "open" && !ended && (
                 <div className="vote-detail-actions"><button type="button" className="secondary-button" disabled={p.busy} onClick={() => { if (window.confirm("팀·개별 투표를 마감할까요? 아직 고르지 않은 사람은 기권으로 처리돼요.")) p.run({ type: "closePathVote", projectId: team.id, pathId: pathView.id }); }}>팀·개별 투표 종료</button></div>
               )}
+            </>
+          );
+        })()}
+      </dialog>
+      <dialog ref={boardRef} className="vote-dash join-board" aria-label="선정 프로젝트" onCancel={() => setBoardId(null)} onClose={() => setBoardId(null)}>
+        {boardView && (() => {
+          const d = boardView.data, live = d.state === "open" && !timeUp(boardView), opener = boardView.ownerId === me.id;
+          const mine = d.picks[me.id]?.ideaId, amSolo = d.options.some((o) => o.soloId === me.id);
+          const joinedTo = (ideaId: string) => Object.entries(d.picks).filter(([, x]) => x.ideaId === ideaId).sort((a, b) => a[1].at.localeCompare(b[1].at)).map(([uid]) => uid);
+          return (
+            <>
+              <header className="vote-dash-head">
+                <div>
+                  <span>{d.round}번째 투표 뒤 · {live ? (d.endsAt ? "남은 시간 " + clock(Date.parse(d.endsAt) - now) : "시간 제한 없음") : d.state === "open" ? "시간 종료 · 결과를 모으고 있어요" : "참가 마감"} · 정원 {d.capacity}명</span>
+                  <h2>{d.state === "closed" ? "프로젝트 배정 결과" : "선정 프로젝트"}</h2>
+                  {live && <small>{amSolo ? "개별로 골라서 내 프로젝트에 참가해 있어요." : "참가할 프로젝트를 하나 골라요. 마감 전까지는 바꿀 수 있어요."}</small>}
+                </div>
+                <button type="button" className="icon-button" aria-label="닫기" onClick={() => setBoardId(null)}><X size={22} /></button>
+              </header>
+              <div className="join-grid">
+                {d.options.map((o, k) => {
+                  const joined = joinedTo(o.ideaId), full = joined.length >= d.capacity, here = mine === o.ideaId, made = d.projects?.[o.ideaId];
+                  return (
+                    <article key={o.ideaId} className={"join-card" + (here ? " here" : "")} style={{ ["--accent" as string]: accents[k % accents.length] }}>
+                      <span className="join-tag">{o.rank ? o.rank + "등" : "개별"}{o.soloNick ? " · " + o.soloNick + "의 프로젝트" : ""}</span>
+                      <h3>{o.title}</h3>
+                      <p>{o.problem}</p>
+                      <div className="join-people"><b>{joined.length}/{d.capacity}명</b>{joined.map((uid) => <span key={uid}>{nameOn(boardView, uid)}</span>)}</div>
+                      <footer>
+                        {live && !ended ? (amSolo ? (here ? <em>내 프로젝트</em> : null)
+                          : <button type="button" className={here ? "primary-button" : "secondary-button"} disabled={p.busy || (!here && full)} onClick={() => p.run({ type: "pickJoin", projectId: team.id, boardId: boardView.id, ideaId: o.ideaId })}>{here ? <><Check size={14} /> 참가함 · 취소</> : full ? "정원 마감" : "참가"}</button>)
+                          : d.state === "closed" ? (made ? <em>{here ? "내 프로젝트 · 프로젝트 목록에서 열 수 있어요" : "프로젝트 만들어짐"}</em> : <em className="none">참가자 없음</em>) : null}
+                      </footer>
+                    </article>
+                  );
+                })}
+              </div>
+              {(d.state === "closed" || opener) && (
+                <p className="join-unassigned"><b>미배정 {(d.unassigned ?? members.map((m) => m.id).filter((uid) => !d.picks[uid])).length}명</b>{(d.unassigned ?? members.map((m) => m.id).filter((uid) => !d.picks[uid])).map((uid) => <span key={uid}>{nameOn(boardView, uid)}</span>)}</p>
+              )}
+              <footer className="vote-dash-foot">
+                {d.state === "closed" && mine && p.onBack && <button type="button" className="secondary-button" onClick={() => { setBoardId(null); p.onBack!(); }}>내 프로젝트 목록으로 <ArrowRight size={15} /></button>}
+                {opener && d.state === "open" && !ended && <button type="button" className="primary-button" disabled={p.busy} onClick={() => { if (window.confirm("참가 받기를 마감할까요? 참가자가 있는 프로젝트가 실제 프로젝트 방으로 만들어져요.")) p.run({ type: "closeJoinBoard", projectId: team.id, boardId: boardView.id }); }}>참가 받기 종료 · 프로젝트 만들기</button>}
+              </footer>
             </>
           );
         })()}

@@ -146,6 +146,48 @@ test('the leader adds only the new cards they check to an open vote',async()=>{
  assert.deepEqual(vote(s)!.data.candidateIds,['g1','g3']);
 });
 
+test('the join board lists the top 5 and solo cards, caps each project, and closing makes the real projects',async()=>{
+ const w=previewWorkspace();
+ for(const [id,owner] of [['h1','seo'],['h2','jun'],['h3','seo']] as const){const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project',title:'카드 '+id});w.ideas.push(c);}
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ vote(s)!.data.counts={h1:2,h2:1,h3:0};
+ s=await run(s,'jun',{type:'closeTeamVote',projectId:'p-onboarding'});
+ s=await run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId:vote(s)!.id});
+ const pathId=s.records.find(r=>r.kind==='pathVote')!.id;
+ // seo goes solo on h3, which got no votes; jun goes with a team.
+ s=await run(s,'seo',{type:'pickPath',projectId:'p-onboarding',pathId,nickname:'서오',choice:'solo',ideaId:'h3'});
+ s=await run(s,'jun',{type:'pickPath',projectId:'p-onboarding',pathId,nickname:'준',choice:'team'});
+ await assert.rejects(run(s,'jun',{type:'openJoinBoard',projectId:'p-onboarding',pathId,capacity:1}),/먼저 마감/);
+ s=await run(s,'jun',{type:'closePathVote',projectId:'p-onboarding',pathId});
+ await assert.rejects(run(s,'seo',{type:'openJoinBoard',projectId:'p-onboarding',pathId,capacity:1}),/팀장/);
+ s=await run(s,'jun',{type:'openJoinBoard',projectId:'p-onboarding',pathId,capacity:1,minutes:10});
+ const jb=()=>s.records.find((r):r is RecordOf<'joinBoard'>=>r.kind==='joinBoard')!;
+ const boardId=jb().id;
+ assert.deepEqual(jb().data.options.map(o=>[o.ideaId,o.rank??null,o.soloNick??null]),[['h1',1,null],['h2',2,null],['h3',null,'서오']]);
+ assert.deepEqual(Object.keys(jb().data.picks),['seo']);
+ // A solo chooser cannot move; a full project refuses another member.
+ await assert.rejects(run(s,'seo',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'h1'}),/개별로 고른/);
+ await assert.rejects(run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'h3'}),/정원/);
+ s=await run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'h2'});
+ s=await run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'h2'});
+ assert.equal(jb().data.picks.jun,undefined);
+ s=await run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'h1'});
+ await assert.rejects(run(s,'seo',{type:'closeJoinBoard',projectId:'p-onboarding',boardId}),/팀장/);
+ s=await run(s,'jun',{type:'closeJoinBoard',projectId:'p-onboarding',boardId});
+ const made=jb().data.projects!;
+ assert.deepEqual(Object.keys(made).sort(),['h1','h3']);
+ const p1=s.workspace.projects.find(p=>p.id===made.h1)!, p3=s.workspace.projects.find(p=>p.id===made.h3)!;
+ // h1 was written by seo, who did not join it, so its first joiner leads it.
+ assert.deepEqual([p1.leaderId,p1.memberIds,p1.sourceIdeaId],['jun',['jun'],'h1']);
+ assert.deepEqual([p3.leaderId,p3.memberIds],['seo',['seo']]);
+ // Members keep working in the shared room until they open their new project.
+ const jun=s.workspace.members.find(m=>m.id==='jun')!;
+ assert.equal(jun.projectId,'p-onboarding');assert.ok(jun.projectIds?.includes(made.h1));
+ const roomMembers=s.workspace.projects.find(p=>p.id==='p-onboarding')!.memberIds;
+ assert.deepEqual(jb().data.unassigned,roomMembers.filter(id=>!['jun','seo'].includes(id)));
+});
+
 test('the leader adds cards finished after the vote opened, and can cancel the vote to start over',async()=>{
  const w=previewWorkspace();
  const make=(id:string,owner:string)=>{const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project'});return c;};

@@ -151,6 +151,9 @@ export const workshopCommand = z.discriminatedUnion("type", [
   S({ type: z.literal("openPathVote"), ...project, voteId: id, minutes: z.number().int().min(1).max(180).optional() }),
   S({ type: z.literal("pickPath"), ...project, pathId: id, nickname: z.string().trim().min(1).max(20), choice: z.enum(["team", "solo"]), ideaId: id.optional() }),
   S({ type: z.literal("closePathVote"), ...project, pathId: id }),
+  S({ type: z.literal("openJoinBoard"), ...project, pathId: id, capacity: z.number().int().min(1).max(100), minutes: z.number().int().min(1).max(180).optional() }),
+  S({ type: z.literal("pickJoin"), ...project, boardId: id, ideaId: id }),
+  S({ type: z.literal("closeJoinBoard"), ...project, boardId: id }),
   S({
     type: z.literal("projectAccess"),
     ...project,
