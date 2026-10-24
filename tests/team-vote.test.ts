@@ -61,6 +61,19 @@ test('the leader sets how many cards each member may vote for',async()=>{
  assert.equal(vote(s)!.data.maxVotes,3);
 });
 
+test('the leader picks which finished cards go on the vote',async()=>{
+ const w=previewWorkspace();
+ for(const [id,owner] of [['c1','seo'],['c2','jun'],['c3','seo']] as const){const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project'});w.ideas.push(c);}
+ let s:State={workspace:w,records:[]};
+ await assert.rejects(run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['c1','i3']}),/완성된 문제 카드만/);
+ await assert.rejects(run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['c1','c1']}),/중복/);
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['c1','c3'],maxVotes:5});
+ assert.deepEqual(vote(s)!.data.candidateIds,['c1','c3']);assert.equal(vote(s)!.data.maxVotes,2);
+ await assert.rejects(run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'c2'}),/후보/);
+ // A card left out stays a finished card.
+ assert.equal(s.workspace.ideas.find(i=>i.id==='c2')!.refinement?.ready,true);
+});
+
 test('the leader adds cards finished after the vote opened, and can cancel the vote to start over',async()=>{
  const w=previewWorkspace();
  const make=(id:string,owner:string)=>{const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project'});return c;};

@@ -29,14 +29,23 @@ test('leaders open simultaneous rooms and members keep independent votes and res
 
   const room = (n: number) => page.locator('.vote-card').filter({ has: page.getByRole('heading', { name: `${n}번째 투표`, exact: true }) });
   const firstCard = () => page.locator('.vote-tile').filter({ has: page.getByRole('heading', { name: /첫 모임의 대화/ }) });
+  const picker = page.getByRole('dialog', { name: '투표 후보 고르기', exact: true });
   await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
+  await expect(picker.getByRole('checkbox')).toHaveCount(2);
+  await expect(picker.getByRole('checkbox', { checked: true })).toHaveCount(2);
+  await picker.getByRole('button', { name: '전체 해제', exact: true }).click();
+  await expect(picker.getByRole('button', { name: '0장으로 투표 시작', exact: true })).toBeDisabled();
+  await picker.getByRole('button', { name: '전체 선택', exact: true }).click();
+  await picker.getByRole('button', { name: '2장으로 투표 시작', exact: true }).click();
+  await expect(picker).not.toBeVisible();
   await room(1).getByRole('button', { name: '투표하러 가기' }).click();
   await firstCard().getByRole('button', { name: '투표', exact: true }).click();
   await expect(page.locator('.pj-vote')).toContainText('내가 고른 카드 1/1');
   await page.getByRole('button', { name: '투표 목록', exact: true }).click();
 
-  await page.getByLabel('새 투표의 한 사람당 투표 수').selectOption('2');
   await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
+  await picker.getByLabel('새 투표의 한 사람당 투표 수').selectOption('2');
+  await picker.getByRole('button', { name: '2장으로 투표 시작', exact: true }).click();
   await expect(page.locator('.vote-card.open')).toHaveCount(2);
   await expect(room(1)).toContainText('1/2명 참여 · 한 사람당 1표');
   await expect(room(2)).toContainText('0/2명 참여 · 한 사람당 2표');
@@ -72,7 +81,11 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await expect(page.getByRole('dialog').locator('.pad-count')).toHaveText('2표');
   await page.getByRole('dialog').getByRole('button', { name: '닫기', exact: true }).click();
   await page.getByRole('button', { name: '투표 목록', exact: true }).click();
+  // A card left out of the new vote stays among the finished cards but is not a candidate.
   await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
+  await picker.getByRole('checkbox', { name: /첫 모임의 대화/ }).uncheck();
+  await picker.getByRole('button', { name: '1장으로 투표 시작', exact: true }).click();
+  await expect(room(3)).toContainText('후보 문제 카드 1장');
   page.once('dialog', dialog => dialog.accept());
   await room(1).getByRole('button', { name: '투표 삭제', exact: true }).click();
   await expect(room(1)).toHaveCount(0);

@@ -161,9 +161,15 @@ export function ProjectSteps(p: StepsProps) {
   function openVoteBoard(voteId: string | null) {
     setSelectedVoteId(voteId); setPick(""); setReason(""); setDetailId(null); setVoteBoard(true);
   }
+  // A new vote starts with every finished card checked; the leader unchecks the ones to leave out.
+  const [picking, setPicking] = useState(false), [chosen, setChosen] = useState<string[]>([]), pickerRef = useRef<HTMLDialogElement>(null);
+  const picked = problems.filter((i) => chosen.includes(i.id));
+  useEffect(() => { const d = pickerRef.current; if (!d) return; if (picking && !d.open) d.showModal(); else if (!picking && d.open) d.close(); }, [picking]);
+  function startPicking() { setChosen(problems.map((i) => i.id)); setPicking(true); }
   async function openNewVote() {
-    if (await p.run({ type: "openTeamVote", projectId: team.id, maxVotes: Math.min(voteLimit, problems.length) })) {
-      setSelectedVoteId(null); setPick(""); setReason(""); setVoteBoard(false);
+    if (!picked.length) return;
+    if (await p.run({ type: "openTeamVote", projectId: team.id, candidateIds: picked.map((i) => i.id), maxVotes: Math.min(voteLimit, picked.length) })) {
+      setPicking(false); setSelectedVoteId(null); setPick(""); setReason(""); setVoteBoard(false);
     }
   }
   // Step 4 board: tapping a card opens all of it in a popup; the vote button is on the card and in the popup.
@@ -321,10 +327,9 @@ export function ProjectSteps(p: StepsProps) {
             <article className="vote-card new">
               <span className="vote-card-state"><Plus size={12} /> 새 투표</span>
               <h3>새로운 투표 열기</h3>
-              <p>기존 투표와 별개로 새 투표방을 열어요. 지금 완성된 문제 카드 <b>{problems.length}장</b>이 모두 후보가 돼요.</p>
+              <p>기존 투표와 별개로 새 투표방을 열어요. 완성된 문제 카드 <b>{problems.length}장</b> 중에서 투표에 올릴 카드를 골라요.</p>
               <div className="vote-card-actions">
-                <label>한 사람당 <select aria-label="새 투표의 한 사람당 투표 수" value={Math.min(voteLimit, Math.max(1, problems.length))} onChange={(e) => setVoteLimit(Number(e.target.value))} disabled={p.busy || !problems.length}>{Array.from({ length: Math.max(1, Math.min(10, problems.length)) }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}표</option>)}</select></label>
-                <button type="button" className="primary-button" disabled={p.busy || !problems.length} onClick={openNewVote}><Vote size={15} /> 새 투표 열기</button>
+                <button type="button" className="primary-button" disabled={p.busy || !problems.length} onClick={startPicking}><Vote size={15} /> 새 투표 열기</button>
               </div>
             </article>
           )}
@@ -358,8 +363,7 @@ export function ProjectSteps(p: StepsProps) {
                     <button className="primary-button" disabled={p.busy} onClick={() => p.run({ type: "closeTeamVote", projectId: team.id, voteId: vote.id })}>투표 마감하기</button>
                   </div>
                 : <div className="pj-vote-open">
-                    <label>한 사람당 <select aria-label="한 사람당 투표 수" value={Math.min(voteLimit, Math.max(1, problems.length))} onChange={(e) => setVoteLimit(Number(e.target.value))} disabled={p.busy || !problems.length}>{Array.from({ length: Math.max(1, Math.min(10, problems.length)) }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}표</option>)}</select></label>
-                    <button className={team.confirmedProblem || vote ? "secondary-button" : "primary-button"} disabled={p.busy || !problems.length} onClick={openNewVote}><Vote size={15} /> 새 투표 열기</button>
+                    <button type="button" className={team.confirmedProblem || vote ? "secondary-button" : "primary-button"} disabled={p.busy || !problems.length} onClick={startPicking}><Vote size={15} /> 새 투표 열기</button>
                   </div>
             )}
           </div>
@@ -465,6 +469,33 @@ export function ProjectSteps(p: StepsProps) {
         {index > 0 && <button className="secondary-button" onClick={() => setStep(steps[index - 1].key)}>이전 · {steps[index - 1].name}</button>}
         {index < steps.length - 1 && <button className="primary-button" onClick={() => setStep(steps[index + 1].key)}>다음 · {steps[index + 1].name} <ArrowRight size={15} /></button>}
       </div>
+
+      {/* New vote: pick which finished cards go on the ballot. */}
+      <dialog ref={pickerRef} className="modal vote-picker" aria-label="투표 후보 고르기" onCancel={() => setPicking(false)} onClose={() => setPicking(false)} onClick={(e) => { if (e.target === e.currentTarget) setPicking(false); }}>
+        {picking && (
+          <>
+            <div className="vote-detail-head">
+              <div><h3>투표 후보 고르기</h3><small>투표에 올리지 않을 카드는 체크를 풀어요. 뺀 카드도 완성 카드 목록에는 그대로 남아요.</small></div>
+              <button type="button" className="icon-button" aria-label="닫기" onClick={() => setPicking(false)}><X size={20} /></button>
+            </div>
+            <div className="vote-picker-bar">
+              <span><b>{picked.length}</b>/{problems.length}장 선택</span>
+              <button type="button" className="text-button" disabled={picked.length === problems.length} onClick={() => setChosen(problems.map((i) => i.id))}>전체 선택</button>
+              <button type="button" className="text-button" disabled={!picked.length} onClick={() => setChosen([])}>전체 해제</button>
+            </div>
+            <ul className="vote-picker-list">
+              {problems.map((i) => (
+                <li key={i.id}><label><input type="checkbox" checked={chosen.includes(i.id)} onChange={(e) => setChosen((c) => (e.target.checked ? [...c, i.id] : c.filter((x) => x !== i.id)))} /> <span>{i.title}</span></label></li>
+              ))}
+            </ul>
+            <div className="vote-detail-actions">
+              <label>한 사람당 <select aria-label="새 투표의 한 사람당 투표 수" value={Math.min(voteLimit, Math.max(1, picked.length))} onChange={(e) => setVoteLimit(Number(e.target.value))} disabled={p.busy || !picked.length}>{Array.from({ length: Math.max(1, Math.min(10, picked.length)) }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}표</option>)}</select></label>
+              <button type="button" className="secondary-button" onClick={() => setPicking(false)}>취소</button>
+              <button type="button" className="primary-button" disabled={p.busy || !picked.length} onClick={openNewVote}><Vote size={15} /> {picked.length}장으로 투표 시작</button>
+            </div>
+          </>
+        )}
+      </dialog>
 
       {/* Writing window: the form, the AI coach and the wall preview for the current step. */}
       <dialog ref={composer} className="pad-composer" onCancel={() => setWriting(false)} onClose={() => setWriting(false)} aria-label={spec.name + " 입력"}>

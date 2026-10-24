@@ -224,8 +224,13 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
     }
     case "openTeamVote": {
       const p = await project(c, cmd.projectId, "leader");
-      const ideas = await voteCards(c, p);
-      if (ideas.length < 1) fail("완성된 문제 카드가 있어야 투표를 열 수 있습니다.");
+      const ready = await voteCards(c, p);
+      if (ready.length < 1) fail("완성된 문제 카드가 있어야 투표를 열 수 있습니다.");
+      // The leader may leave some finished cards out; without a list every finished card is a candidate.
+      const picked = cmd.candidateIds;
+      if (picked && new Set(picked).size !== picked.length) fail("후보가 중복되었습니다.");
+      if (picked?.some((id) => !ready.some((i) => i.id === id))) fail("완성된 문제 카드만 투표 후보로 고를 수 있습니다.");
+      const ideas = picked ? ready.filter((i) => picked.includes(i.id)) : ready;
       const votes = await teamVotes(c, p.id);
       const counterPath = path(c, "control/teamvote-" + p.id);
       const counter = await c.store.read<{ round: number }>(counterPath);

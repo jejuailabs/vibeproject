@@ -323,3 +323,15 @@
 .vote-detail-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .vote-detail-actions{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap}
 .vote-detail-actions .primary-button,.vote-detail-actions .secondary-button{padding:11px 18px;font-size:14px;border-radius:22px}
+.modal.vote-picker{width:min(560px,calc(100vw - 32px));padding:24px 26px;background:#fff;color:#2f2840;border:0}
+.vote-picker h3{margin:0 0 4px;font-size:19px}
+.vote-picker .vote-detail-head{align-items:flex-start;gap:12px}
+.vote-picker .vote-detail-head small{color:#6f6480;font-size:12px}
+.vote-picker-bar{display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:1px solid #eee7f4;font-size:13px}
+.vote-picker-bar span{margin-right:auto}
+.vote-picker-list{list-style:none;margin:0;padding:6px 0;max-height:min(52vh,420px);overflow-y:auto}
+.vote-picker-list label{display:flex;align-items:center;gap:10px;padding:10px 6px;border-radius:8px;cursor:pointer;font-size:14px}
+.vote-picker-list label:hover{background:#f6f1fb}
+.vote-picker-list input{width:17px;height:17px;flex:none;accent-color:#6f45b4}
+.vote-picker .vote-detail-actions label{font-size:12px;color:#6f6480;display:flex;align-items:center;gap:6px;margin-right:auto}
+.vote-picker .vote-detail-actions select{border:1px solid #e1d8eb;border-radius:8px;padding:6px 8px;background:#fff;color:#3e3249;color-scheme:light}

@@ -142,7 +142,7 @@ export const workshopCommand = z.discriminatedUnion("type", [
     revision,
     reason,
   }),
-  S({ type: z.literal("openTeamVote"), ...project, maxVotes: z.number().int().min(1).max(10).optional() }),
+  S({ type: z.literal("openTeamVote"), ...project, maxVotes: z.number().int().min(1).max(10).optional(), candidateIds: z.array(id).min(1).max(100).optional() }),
   S({ type: z.literal("castTeamVote"), ...project, voteId: id.optional(), ideaId: id }),
   S({ type: z.literal("closeTeamVote"), ...project, voteId: id.optional() }),
   S({ type: z.literal("refreshTeamVote"), ...project, voteId: id.optional() }),
