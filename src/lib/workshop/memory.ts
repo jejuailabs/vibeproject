@@ -45,6 +45,17 @@ export class MemoryStore implements Store {
 }
 // Server-only rows (join password hashes) never enter PreviewState; keep them in this page's memory.
 const privateRows = new Map<string, unknown>();
+// The preview keeps a picked photo as a blob: URL and registers it the way the upload route would.
+export function rememberPreviewPhoto(cohortId: string, uid: string, url: string) {
+  const id = "photo-" + crypto.randomUUID();
+  privateRows.set("cohorts/" + cohortId + "/avatarPhotos/" + id, {
+    id,
+    ownerId: uid,
+    url,
+    createdAt: new Date().toISOString(),
+  });
+  return id;
+}
 export async function previewWorkshop(
   state: PreviewState,
   raw: unknown,
@@ -85,7 +96,11 @@ export async function previewWorkshop(
   const result = await applyWorkshop(c, raw);
   privateRows.clear();
   for (const [k, v] of s.rows)
-    if (k.startsWith(root + "/projectSecrets/")) privateRows.set(k, v);
+    if (
+      k.startsWith(root + "/projectSecrets/") ||
+      k.startsWith(root + "/avatarPhotos/")
+    )
+      privateRows.set(k, v);
   const members = await s.list<Member>(root + "/members"),
     ideas = await s.list<Idea>(root + "/ideas");
   const cohort = await s.read<Workspace["cohort"]>(root);

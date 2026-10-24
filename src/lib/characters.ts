@@ -85,9 +85,14 @@ const details = [
 ] as const;
 export const characters = details.map(item=>({...item,...urls[item.id]}));
 export function isCharacterId(value:string):value is CharacterId { return (characterIds as readonly string[]).includes(value); }
+// An uploaded profile photo is stored as its URL: a Firebase Storage link, or a blob: link in the sample preview.
+export function isPhotoAvatar(value?:string):value is string { return !!value && (value.startsWith('https://firebasestorage.googleapis.com/') || value.startsWith('blob:')); }
 export function characterFor(member?:{id:string;avatar?:string}) {
  if(member?.avatar && isCharacterId(member.avatar)) return characters.find(c=>c.id===member.avatar)!;
  const sample:Record<string,number>={min:0,jun:1,seo:2,ha:3};
  const seed=member && Object.hasOwn(sample,member.id)?sample[member.id]:Array.from(member?.id||'maker').reduce((n,c)=>n+c.charCodeAt(0),0)%characters.length;
+ // A photo keeps the seeded character's id and color so pickers and accents still work.
+ const photo=member?.avatar;
+ if(isPhotoAvatar(photo)) return {...characters[seed],image:photo,thumbnail:photo,photo:true};
  return characters[seed];
 }

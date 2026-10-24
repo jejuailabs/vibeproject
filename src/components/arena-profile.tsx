@@ -21,7 +21,7 @@ export function ArenaProfile({ workspace: w, records, space, compact, onCharacte
       <span className="arena-portrait-word" aria-hidden="true">{space === "me" ? "MAKER" : "SQUAD"}</span>
       {space === "me" ? <img className="hero-portrait" src={characterFor(w.me).image} alt={w.me.name + "의 선택한 캐릭터"} fetchPriority="high"/> : <div className="arena-lineup">{members.slice(0, 4).map((m, i) => <div key={m.id} className={"arena-lineup-player player-" + i}><img src={characterFor(m).image} alt={m.name + "의 캐릭터"}/><span>{m.name}</span></div>)}{members.length === 0 && <p className="arena-no-team">함께할 문제를 고르면<br/>우리 팀의 여기가 채워집니다.</p>}</div>}
       <span className="arena-shirt-number" aria-hidden="true">{String(space === "me" ? Math.max(1, w.members.findIndex(m => m.id === w.me.id) + 1) : members.length).padStart(2, "0")}</span>
-      {space === "me" && <button className="hero-character-change" onClick={onCharacter}><Pencil size={13}/>캐릭터 변경</button>}
+      {space === "me" && <button className="hero-character-change" onClick={onCharacter}><Pencil size={13}/>프로필 편집</button>}
     </div>
     <div className="arena-season" aria-label={"현재 " + week + "주차, " + stages[week - 1][0]}>
       <span className="arena-overline">THE FOUR WEEK JOURNEY</span>

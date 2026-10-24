@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { docKeys, stages, readinessItems } from "./model";
 import { stepKey } from "../steps";
+import { characterIds } from "../characters";
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,240}$/);
 const title = z.string().trim().min(1).max(160),
   body = z.string().trim().min(1).max(20000),
@@ -24,6 +25,17 @@ const date = z
   .datetime({ offset: true })
   .transform((v) => new Date(v).toISOString());
 const project = { projectId: id };
+const nickname = z
+  .string()
+  .transform((v) => v.normalize("NFC").replace(/\s+/g, " ").trim())
+  .pipe(
+    z
+      .string()
+      .min(1, "닉네임을 적어주세요.")
+      .max(20, "닉네임은 20자까지 쓸 수 있어요.")
+      .regex(/^[^\p{Cc}<>]+$/u, "닉네임에 쓸 수 없는 글자가 있어요."),
+  );
+export const photoId = z.string().regex(/^photo-[a-f0-9-]{36}$/);
 const joinPolicy = z.enum(["open", "password", "request"]);
 const S = <T extends z.ZodRawShape>(fields: T) => z.object(fields).strict();
 export const workshopCommand = z.discriminatedUnion("type", [
@@ -360,6 +372,12 @@ export const workshopCommand = z.discriminatedUnion("type", [
     reason,
   }),
   S({ type: z.literal("resolveReport"), reportId: id, resolution: reason }),
+  S({
+    type: z.literal("updateProfile"),
+    name: nickname,
+    // A built-in character id, or the id of a photo this member uploaded through /api/profile; left out keeps the current image.
+    avatar: z.union([z.enum(characterIds), photoId]).optional(),
+  }),
 ]);
 export type WorkshopCommand = z.infer<typeof workshopCommand>;
 export const workshopEnvelope = S({
