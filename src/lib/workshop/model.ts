@@ -130,7 +130,9 @@ export interface DataMap {
   // A project's own vote among its members' problem cards; the leader opens and closes it, then confirms a problem.
   teamVote: { round: number; state: "open" | "closed" | "cancelled" | "deleted"; candidateIds: string[]; counts: Record<string, number>; voters: number; openedAt: string; closedAt: string | null; maxVotes?: number;
     // endsAt is the voting deadline; whoever has not voted by the close counts as abstained.
-    endsAt?: string | null; abstained?: number; endedBy?: "time" | "manual" };
+    endsAt?: string | null; abstained?: number; endedBy?: "time" | "manual";
+    // Set at close: cards ranked 1st to 5th with at least one vote; tied cards share a rank.
+    top?: { ideaId: string; rank: number; votes: number }[] };
   // ideaId is the single pick of votes opened before multi-vote; ideaIds holds every pick.
   teamBallot: { round: number; voteId?: string; ideaId?: string; ideaIds?: string[] };
   project: ProjectData;

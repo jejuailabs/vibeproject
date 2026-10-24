@@ -306,7 +306,12 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       const timeUp = !!vote.data.endsAt && vote.data.endsAt <= c.now;
       if (p.leaderId !== c.uid && !timeUp) fail("팀장이 확정할 수 있습니다.", 403);
       const abstained = Math.max(0, p.memberIds.length - vote.data.voters);
-      write(c, vote.id, "teamVote", { ...vote.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual" }, "project", p.id, vote.ownerId, vote);
+      const tally = vote.data.candidateIds.map((ideaId) => ({ ideaId, votes: vote.data.counts[ideaId] || 0 }));
+      const top = tally
+        .map((t) => ({ ...t, rank: tally.filter((o) => o.votes > t.votes).length + 1 }))
+        .filter((t) => t.votes > 0 && t.rank <= 5)
+        .sort((a, b) => a.rank - b.rank);
+      write(c, vote.id, "teamVote", { ...vote.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual", top }, "project", p.id, vote.ownerId, vote);
       event(c, "투표 마감", vote.data.voters + "명 참여 · 기권 " + abstained + "명" + (timeUp ? " · 시간 종료" : ""), p.id, p.id);
       return { id: p.id };
     }

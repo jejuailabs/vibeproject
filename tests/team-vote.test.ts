@@ -91,6 +91,20 @@ test('a timed vote refuses late ballots, then any member may close it and non-vo
  assert.equal(vote(s)!.data.state,'closed');assert.equal(vote(s)!.data.endedBy,'time');assert.equal(vote(s)!.data.abstained,members-1);
 });
 
+test('closing a vote marks the 1st to 5th cards with votes, ties sharing a rank',async()=>{
+ const w=previewWorkspace();
+ const ids=['e1','e2','e3','e4','e5','e6','e7'];
+ for(const id of ids){const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:'seo',projectId:'p-onboarding',scope:'project'});w.ideas.push(c);}
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ vote(s)!.data.counts={e1:5,e2:3,e3:3,e4:2,e5:1,e6:1,e7:0};
+ s=await run(s,'jun',{type:'closeTeamVote',projectId:'p-onboarding'});
+ assert.deepEqual(vote(s)!.data.top,[
+  {ideaId:'e1',votes:5,rank:1},{ideaId:'e2',votes:3,rank:2},{ideaId:'e3',votes:3,rank:2},
+  {ideaId:'e4',votes:2,rank:4},{ideaId:'e5',votes:1,rank:5},{ideaId:'e6',votes:1,rank:5},
+ ]);
+});
+
 test('the leader adds cards finished after the vote opened, and can cancel the vote to start over',async()=>{
  const w=previewWorkspace();
  const make=(id:string,owner:string)=>{const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project'});return c;};

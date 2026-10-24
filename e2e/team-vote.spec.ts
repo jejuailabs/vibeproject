@@ -74,6 +74,17 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await page.getByRole('dialog').getByRole('button', { name: '닫기', exact: true }).click();
   await page.getByRole('button', { name: '투표 목록', exact: true }).click();
   await expect(room(1)).toContainText('투표 마감');
+  // A closed vote's dashboard becomes the result report, which prints on its own as a PDF.
+  await room(1).getByRole('button', { name: '대시보드', exact: true }).click();
+  await expect(dash.getByRole('heading', { name: '1번째 투표 결과', exact: true })).toBeVisible();
+  await expect(dash.locator('.vote-dash-clock.win')).toContainText('첫 모임의 대화');
+  await expect(dash.locator('.vote-dash-bars li').first()).toContainText('TOP 5');
+  await expect(dash.locator('.vote-dash-stat').nth(1)).toContainText('기권 1명');
+  await page.screenshot({ path: 'work/team-vote-report-desktop.png' });
+  await page.evaluate(() => { window.print = () => { (window as unknown as { printed: string }).printed = (document.querySelector('body > .vote-print') as HTMLElement | null)?.innerText || ''; }; });
+  await dash.getByRole('button', { name: 'PDF로 저장', exact: true }).click();
+  expect(await page.evaluate(() => (window as unknown as { printed: string }).printed)).toContain('1번째 투표 결과');
+  await expect(page.locator('body > .vote-print')).toHaveCount(0);  await dash.getByRole('button', { name: '닫기', exact: true }).click();
   await expect(room(2)).toContainText('투표 중');
 
   await page.getByLabel('미리보기 참가자').selectOption('seo');
