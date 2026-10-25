@@ -32,9 +32,11 @@ async function mockWorkshop(page: Page, options: {
   failAt?: number;
   holdSave?: ReturnType<typeof deferred>;
   stalePoll?: ReturnType<typeof deferred>;
+  holdInitial?: ReturnType<typeof deferred>;
+  records?: WorkshopRecord[];
 } = {}) {
   const state = {
-    records: initialRecords(options.picks, options.maxVotes),
+    records: structuredClone(options.records ?? initialRecords(options.picks, options.maxVotes)),
     gets: 0, completed: 0, active: 0, maxActive: 0, holdPoll: false,
     commands: [] as { ideaId: string; requestId: string }[],
     unexpected: [] as string[],
@@ -54,6 +56,7 @@ async function mockWorkshop(page: Page, options: {
       state.gets++;
       const records = structuredClone(state.records).filter((record) =>
         record.kind !== "teamBallot" || !request.headers().authorization?.endsWith("local-test-seo"));
+      if (options.holdInitial) await options.holdInitial.promise;
       if (state.holdPoll && options.stalePoll) await options.stalePoll.promise;
       return route.fulfill({ json: { records, nextCursor: null, ai: { enabled: false, model: "" } } });
     }
@@ -231,4 +234,121 @@ test("switching participant discards unsent choices and ignores the previous par
   await expect(page.getByTestId("notice")).toBeEmpty();
   await expect(page.getByTestId("error")).toBeEmpty();
   await expect(page.getByTestId("reloads")).toHaveText("0");
+});
+
+function sharedVoteRecords() {
+  const records = initialRecords();
+  const target = records[0] as RecordOf<"teamVote">;
+  target.data.title = "공유 대상 투표";
+  const newer = structuredClone(target);
+  newer.id = "vote-newer";
+  newer.data.round = 2;
+  newer.data.title = "다른 투표";
+  return [...records, newer];
+}
+
+const sharedUrl = (voteId = "vote-local") => `/?cohort=preview&project=p-onboarding&vote=${voteId}`;
+
+test("share buttons copy a clean exact-vote link that opens after delayed records", async ({ page, context }) => {
+  const records = sharedVoteRecords();
+  const state = await mockWorkshop(page, { records });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+      writeText: async (value: string) => { (window as Window & { copiedVoteLink?: string }).copiedVoteLink = value; },
+    } });
+  });
+  await page.goto("/?invite=remove-me&unrelated=ignore#section");
+  const targetRoom = page.locator('.vote-card[data-vote-id="vote-local"]');
+  await targetRoom.getByRole("button", { name: "공유하기", exact: true }).click();
+  await expect(targetRoom.getByRole("button", { name: "복사했어요", exact: true })).toBeVisible();
+  const copied = await page.evaluate(() => (window as Window & { copiedVoteLink?: string }).copiedVoteLink!);
+  const url = new URL(copied);
+  expect(url.origin).toBe("http://127.0.0.1:3107");
+  expect(Object.fromEntries(url.searchParams)).toEqual({ cohort: "preview", project: "p-onboarding", vote: "vote-local" });
+  expect(url.hash).toBe("");
+  await targetRoom.getByRole("button", { name: "투표하러 가기", exact: true }).click();
+  await page.getByRole("button", { name: "공유하기", exact: true }).click();
+  await expect(page.getByRole("button", { name: "복사했어요", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as Window & { copiedVoteLink?: string }).copiedVoteLink)).toBe(copied);
+
+  const recipient = await context.newPage();
+  const snapshot = deferred();
+  const received = await mockWorkshop(recipient, { records, holdInitial: snapshot });
+  await recipient.goto(copied);
+  await expect(recipient.getByText("공유한 투표를 불러오는 중이에요.", { exact: true })).toBeVisible();
+  await expect(recipient.getByText("이 투표는 삭제되었거나 더 이상 볼 수 없어요.", { exact: true })).toHaveCount(0);
+  await expect(recipient.locator(".vote-tile")).toHaveCount(0);
+  snapshot.resolve();
+  await expect(recipient.locator(".vote-board-title")).toContainText("공유 대상 투표");
+  await expect(recipient.locator(".vote-tile")).toHaveCount(4);
+  await expect(recipient.getByTestId("shared-opens")).toHaveText("1");
+  await expect(recipient.getByTestId("shared-commands")).toHaveText("[]");
+  await recipient.getByRole("button", { name: "투표 목록", exact: true }).click();
+  await expect(recipient.locator(".vote-card[data-vote-id]")).toHaveCount(2);
+  await expect(recipient.locator(".vote-board-title")).toHaveCount(0);
+  expect(state.unexpected).toEqual([]);
+  expect(received.unexpected).toEqual([]);
+  await recipient.close();
+});
+
+test("share button provides a readonly exact-vote link when clipboard access is denied", async ({ page }) => {
+  await mockWorkshop(page, { records: sharedVoteRecords() });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+      writeText: async () => { throw new Error("Clipboard denied in test"); },
+    } });
+  });
+  await page.goto("/?invite=remove-me");
+  const room = page.locator('.vote-card[data-vote-id="vote-local"]');
+  await room.getByRole("button", { name: "공유하기", exact: true }).click();
+  const link = room.getByRole("textbox", { name: "투표 공유 링크", exact: true });
+  await expect(link).toHaveAttribute("readonly", "");
+  expect(Object.fromEntries(new URL(await link.inputValue()).searchParams)).toEqual({ cohort: "preview", project: "p-onboarding", vote: "vote-local" });
+  await link.focus();
+  expect(await link.evaluate((input: HTMLInputElement) => input.selectionEnd! - input.selectionStart!)).toBe((await link.inputValue()).length);
+});
+
+test("shared vote waits for login then switches only an existing project membership", async ({ page }) => {
+  const state = await mockWorkshop(page, { records: sharedVoteRecords() });
+  await page.addInitScript(() => {
+    (window as Window & { voteFixture?: unknown }).voteFixture = { signedOut: true, currentProject: "p-other" };
+  });
+  await page.goto(sharedUrl());
+  await expect(page.getByRole("button", { name: "테스트 로그인", exact: true })).toBeVisible();
+  await expect(page.getByTestId("shared-opens")).toHaveText("0");
+  await expect(page.getByTestId("shared-commands")).toHaveText("[]");
+  expect(state.gets).toBe(0);
+  await page.getByRole("button", { name: "테스트 로그인", exact: true }).click();
+  await expect(page.getByTestId("active-project")).toHaveText("p-onboarding");
+  await expect(page.locator(".vote-board-title")).toContainText("공유 대상 투표");
+  await expect(page.getByTestId("shared-commands")).toHaveText('[{"type":"enterProject","projectId":"p-onboarding"}]');
+  await expect(page.getByTestId("shared-opens")).toHaveText("1");
+  expect(state.unexpected).toEqual([]);
+});
+
+test("shared vote refuses nonmembers without entering or joining a project", async ({ page }) => {
+  const state = await mockWorkshop(page, { records: sharedVoteRecords() });
+  await page.addInitScript(() => {
+    (window as Window & { voteFixture?: unknown }).voteFixture = { nonmember: true };
+  });
+  await page.goto(sharedUrl());
+  await expect(page.getByTestId("error")).toHaveText("이 투표를 보려면 해당 프로젝트에 먼저 참여해주세요.");
+  await expect(page.getByTestId("active-project")).toHaveText("p-other");
+  await expect(page.getByTestId("shared-commands")).toHaveText("[]");
+  await expect(page.getByTestId("shared-opens")).toHaveText("0");
+  await expect(page.locator(".vote-board-title")).toHaveCount(0);
+  expect(state.commands).toEqual([]);
+  expect(state.unexpected).toEqual([]);
+});
+
+test("shared vote reports missing or deleted rooms after records finish loading", async ({ page }) => {
+  const records = sharedVoteRecords();
+  (records[0] as RecordOf<"teamVote">).data.state = "deleted";
+  await mockWorkshop(page, { records });
+  for (const voteId of ["vote-missing", "vote-local"]) {
+    await page.goto(sharedUrl(voteId));
+    await expect(page.getByText("이 투표는 삭제되었거나 더 이상 볼 수 없어요.", { exact: true })).toBeVisible();
+    await expect(page.locator(".vote-board-title")).toHaveCount(0);
+    await expect(page.locator(".vote-tile")).toHaveCount(0);
+  }
 });

@@ -34,6 +34,7 @@ export function useWorkshop({
   setNotice: (s: string) => void;
 }) {
   const [records, setRecords] = useState<WorkshopRecord[]>([]),
+    [loadedIdentity, setLoadedIdentity] = useState(""),
     [invites, setInvites] = useState<Snapshot["invites"]>(),
     [ai, setAi] = useState<Snapshot["ai"]>({ enabled: false, model: "" }),
     [busy, setBusy] = useState(false),
@@ -88,10 +89,12 @@ export function useWorkshop({
       if (update && record.revision >= update.revision) updates.current.delete(record.id);
     }
     setRecords(protectedRecords);
+    setLoadedIdentity(startedFor);
   }, [user, preview, cohortId, setData]);
   useEffect(() => {
     if (!user && !preview) {
       setRecords([]);
+      setLoadedIdentity("");
       return;
     }
     refresh().catch((e) => setError(e.message));
@@ -155,6 +158,7 @@ export function useWorkshop({
           }
           setRecords((current) => mergeRecordUpdates(current, value.records));
         } else {
+          if ((command as { type?: string })?.type === "enterProject") setLoadedIdentity("");
           await Promise.all([refresh(), reload(user)]);
         }
       }
@@ -400,6 +404,7 @@ export function useWorkshop({
       : records;
   return {
     records: visible,
+    recordsReady: preview || loadedIdentity === identity,
     invites,
     ai,
     busy,

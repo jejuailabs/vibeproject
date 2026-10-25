@@ -8,6 +8,7 @@ import { canReadIdea } from "@/lib/policy";
 import { answered, definitionFields, questionFields, statement } from "@/lib/refinement";
 import { docKeys, docNames, type DocKey } from "@/lib/workshop/model";
 import { teamVoteTitle } from "@/lib/workshop/vote-title";
+import { VoteShareButton } from "./workshop/vote-share-button";
 import { recordsOf, type Props } from "./workshop/common";
 import type { VoteQueue } from "./workshop/use-vote-queue";
 import type { Command, Idea, Member, Project } from "@/lib/types";
@@ -38,6 +39,8 @@ type StepsProps = Props & {
   onIdea: (id: string) => void;
   onNavigate: (tab: string, doc?: DocKey, target?: string) => void;
   initialStep?: StepKey;
+  initialVoteId?: string;
+  recordsReady?: boolean;
   onStepChange: (step: StepKey) => void;
   onGallery: () => void;
   onBack?: () => void;
@@ -91,8 +94,22 @@ export function ProjectSteps(p: StepsProps) {
   const [selectedVoteId, setSelectedVoteId] = useState<string | null>(null);
   const vote = votes.find((x) => x.id === selectedVoteId);
   const [voteBoard, setVoteBoard] = useState(false);
+  const handledVoteLink = useRef<string | undefined>(undefined);
+  const [voteLinkError, setVoteLinkError] = useState("");
   useEffect(() => { if (step !== "confirm") setVoteBoard(false); }, [step]);
   useEffect(() => { if (selectedVoteId && !vote) { setSelectedVoteId(null); setVoteBoard(false); } }, [selectedVoteId, vote]);
+  useEffect(() => {
+    if (!p.initialVoteId || handledVoteLink.current === p.initialVoteId || p.recordsReady === false) return;
+    handledVoteLink.current = p.initialVoteId;
+    setStep("confirm");
+    setVoteLinkError("");
+    if (votes.some((room) => room.id === p.initialVoteId)) {
+      setSelectedVoteId(p.initialVoteId);
+      setVoteBoard(true);
+    } else {
+      setVoteLinkError("이 투표는 삭제되었거나 더 이상 볼 수 없어요.");
+    }
+  }, [p.initialVoteId, p.recordsReady, votes]);
 
   const myBallot = vote && recordsOf(p, "teamBallot").find((x) => x.projectId === team.id && x.ownerId === me.id && x.data.round === vote.data.round && (x.data.voteId === vote.id || (!x.data.voteId && vote.id === "teamvote-" + team.id)));
   const savedPicks = myBallot ? myBallot.data.ideaIds ?? (myBallot.data.ideaId ? [myBallot.data.ideaId] : []) : [];
@@ -444,6 +461,8 @@ export function ProjectSteps(p: StepsProps) {
         </section>
       )}
 
+      {step === "confirm" && voteLinkError && <p className="form-error" role="alert">{voteLinkError}</p>}
+      {step === "confirm" && p.initialVoteId && p.recordsReady === false && <p role="status">공유한 투표를 불러오는 중이에요.</p>}
       {step === "confirm" && !voteBoard && (
         <div className="vote-list">
           {votes.map((room) => {
@@ -456,6 +475,7 @@ export function ProjectSteps(p: StepsProps) {
               {room.data.state === "closed" && roomTop && (room.data.counts[roomTop.id] || 0) > 0 && <blockquote><Crown size={13} /> {room.data.counts[roomTop.id]}표 · {statement(roomTop.refinement!)}</blockquote>}
               <div className="vote-card-actions">
                 <button type="button" className="primary-button" onClick={() => openVoteBoard(room.id)}>{room.data.state === "open" ? "투표하러 가기" : "카드·결과 보기"} <ArrowRight size={15} /></button>
+                <VoteShareButton cohortId={w.cohort.id} projectId={team.id} voteId={room.id} />
                 {room.ownerId === me.id && room.data.state !== "cancelled" && <button type="button" className="secondary-button" onClick={() => setDashId(room.id)}><BarChart3 size={14} /> 대시보드</button>}
                 {room.data.state === "closed" && (() => {
                   const pv = pathOf(room.id);
@@ -505,7 +525,7 @@ export function ProjectSteps(p: StepsProps) {
       {step === "confirm" && voteBoard && (
         <>
           <button type="button" className="text-button vote-back" onClick={() => setVoteBoard(false)}><ArrowLeft size={14} /> 투표 목록</button>
-          {vote && <h3 className="vote-board-title">{teamVoteTitle(vote.data, cards)}{vote.ownerId === me.id && vote.data.state !== "cancelled" && <button type="button" className="secondary-button" onClick={() => setDashId(vote.id)}><BarChart3 size={14} /> 대시보드</button>}</h3>}
+          {vote && <div className="vote-board-title"><h3>{teamVoteTitle(vote.data, cards)}</h3><VoteShareButton cohortId={w.cohort.id} projectId={team.id} voteId={vote.id} />{vote.ownerId === me.id && vote.data.state !== "cancelled" && <button type="button" className="secondary-button" onClick={() => setDashId(vote.id)}><BarChart3 size={14} /> 대시보드</button>}</div>}
           <div className="pj-vote">
             {team.confirmedProblem ? (
               <div className="steps-confirmed">

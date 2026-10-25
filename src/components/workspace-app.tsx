@@ -19,6 +19,8 @@ import type {DocKey} from '@/lib/workshop/model';
 import {WorkshopHub} from './workshop/hub';
 import {ArenaProfile} from './arena-profile';
 import {useWorkshop} from './workshop/use-workshop';
+import {useSharedVote} from './workshop/use-shared-vote';
+import type {SharedVoteTarget} from '@/lib/workshop/vote-link';
 import {ProfileEditor,type ProfileChoice} from './profile-editor';
 import {characterFor} from '@/lib/characters';
 import {rememberPreviewPhoto} from '@/lib/workshop/memory';
@@ -49,6 +51,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  const [startRequest,setStartRequest]=useState(0);
  const [memberFilter,setMemberFilter]=useState<string|null>(null);
  const [stepByProject,setStepByProject]=useState<Record<string,StepKey>>({});
+ const [sharedVote,setSharedVote]=useState<SharedVoteTarget|null>(null);
  const [entered,setEntered]=useState(false),[unverified,setUnverified]=useState<User|null>(null);
  const [invite,setInvite]=useState<{projectId:string;code:string}|null>(null),lobbyDefault=useRef(false);
  const [workshopTab,setWorkshopTab]=useState<{id:string;revision:number;docKey?:DocKey;target?:string}|undefined>();
@@ -61,6 +64,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  const extraPages=useRef<{kind:'ideas'|'messages'|'comments'|'history';target?:string;cursor?:string}[]>([]);
  const pending=useRef<{key:string;id:string}|null>(null);
  const previewData=useRef<Workspace|null>(null);
+ const workspaceLoadSequence=useRef(0);
  useEffect(()=>{previewData.current=data;},[data]);
  useEffect(()=>{if(window.innerWidth<1280)setChatOpen(false);const params=new URLSearchParams(location.search);if(params.get('view')==='workshop')setView('workshop');const project=params.get('project'),code=params.get('invite');if(project&&code&&/^[a-f0-9]{32}$/.test(code)){setInvite({projectId:project,code});setView('projects');lobbyDefault.current=true;}},[]);
  // Signed-in members without a project start at the lobby; the sample preview opens on its populated dashboard.
@@ -72,20 +76,22 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  useEffect(()=>{if(simple){setSpace('project');setView(v=>v==='ideas'||v==='history'?'dashboard':v);}},[simple,data?.me.id]);
  function clearInvite(){setInvite(null);const url=new URL(location.href);url.searchParams.delete('project');url.searchParams.delete('invite');history.replaceState(null,'',url);}
  const load=useCallback(async(current:User)=>{
+  const sequence=++workspaceLoadSequence.current;
   const response=await fetch('/api/workspace?cohortId='+encodeURIComponent(cohortId),{headers:{Authorization:'Bearer '+await current.getIdToken()},cache:'no-store'});
-  const value=await response.json();if(!response.ok){if(response.status===401||response.status===403){setData(null);extraPages.current=[];}throw new Error(value.error||'불러오지 못했습니다.');}
+  const value=await response.json();if(sequence!==workspaceLoadSequence.current)return;if(!response.ok){if(response.status===401||response.status===403){setData(null);extraPages.current=[];}throw new Error(value.error||'불러오지 못했습니다.');}
   const token=await current.getIdToken();
   const pages=await Promise.all(extraPages.current.map(async page=>{
    const params=new URLSearchParams({cohortId,kind:page.kind,...(page.target?{target:page.target}:{}),...(page.cursor?{cursor:page.cursor}:{})});
    const r=await fetch('/api/page?'+params,{headers:{Authorization:'Bearer '+token},cache:'no-store'});if(!r.ok)return null;return {kind:page.kind,...await r.json()};
   }));
   for(const page of pages){if(!page)continue;const key=page.kind==='history'?'events':page.kind;const merged=new Map(value[key].map((item:any)=>[item.id,item]));for(const item of page.items)merged.set(item.id,item);value[key]=[...merged.values()].sort((a:any,b:any)=>key==='messages'||key==='comments'?a.createdAt.localeCompare(b.createdAt):(b.updatedAt||b.createdAt).localeCompare(a.updatedAt||a.createdAt));}
-  setData(value);
+  if(sequence===workspaceLoadSequence.current)setData(value);
  },[]);
  useEffect(()=>{
   if(preview)return;
   if(!firebaseConfigured){setLoading(false);setRestoring(false);setError('Firebase 웹 설정이 필요합니다.');return;}
   return onAuthStateChanged(clientAuth(),async current=>{
+   workspaceLoadSequence.current++;
    setUser(current);setError('');setUnverified(null);
    if(!current){setData(null);extraPages.current=[];setPageCursors({});setLoading(false);setRestoring(false);return;}
    // An email account opens nothing until its address is confirmed.
@@ -125,6 +131,10 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
   }catch(e){setError(e instanceof Error?e.message:'다시 시도해주세요.');return false;}finally{setBusy(false);}
  }
  const workshop=useWorkshop({data,setData,user,preview,cohortId,reload:load,setError,setNotice});
+ useSharedVote({workspace:data,run:workshop.run,onError:setError,onOpen:target=>{
+  setSharedVote(target);setStepByProject(v=>({...v,[target.projectId]:'confirm'}));
+  setSpace('project');setView('dashboard');setEntered(true);setChatOpen(false);
+ }});
  // A new photo is uploaded first; the nickname and image are then saved together, so every name and avatar refreshes at once.
  async function saveProfile(choice:ProfileChoice){
   if(!data)return false;
@@ -209,7 +219,7 @@ export function WorkspaceApp({preview=false}:{preview?:boolean}){
  <main className="main-content">
  {error&&<div className="error-banner" role="alert">{error}<button aria-label="오류 닫기" onClick={()=>setError('')}><X size={16}/></button></div>}
  {!projectDashboard&&!(simple&&view==='projects')&&<div className="page-heading"><div><span className="eyebrow">{view==='workshop'?'YOUR WORKSHOP / IN PLAY':view==='dashboard'?'MAKE SOMETHING MEANINGFUL':view==='ideas'?'IDEAS GROW TOGETHER':view==='projects'?'BETTER, TOGETHER':view==='gallery'?'SHOW WHAT WE MADE':'EVERY STEP MATTERS'}</span><h1>{view==='workshop'?'워크숍 플레이북':view==='dashboard'?(space==='me'?me.name.split(' ')[0]+'님의 작업 공간':space==='project'?'우리의 프로젝트':'함께 만드는 가능성'):view==='ideas'?'아이디어 보드':view==='projects'?'프로젝트 만들기 · 참여하기':view==='gallery'?'워크숍 전시 갤러리':'생각이 자라온 기록'}</h1><p>{view==='workshop'?'현장 활동부터 팀 구성, 개발과 발표까지 한 공간에서 진행하세요.':view==='dashboard'?'오늘의 작은 생각을, 다음 가능성으로 연결해보세요.':view==='ideas'?'서로의 시선이 더해지면, 작은 생각도 달라집니다.':view==='projects'?'리더는 프로젝트를 만들고, 팀원은 목록에서 골라 참여해요.':view==='gallery'?'각 팀의 처음 생각, 확정한 문제, 결과를 한곳에서 봐요.':'첫 생각부터 지금까지, 우리의 변화가 남아 있어요.'}</p></div>{view!=='projects'&&view!=='gallery'&&!(view==='dashboard'&&space==='project')&&<button className="primary-button" onClick={()=>view==='dashboard'?setStartRequest(n=>n+1):openComposer()}><Plus size={17}/>생각 남기기</button>}</div>}
- {view==='dashboard'&&space==='project'&&(!entered&&projectIdsOf(me).length?<MyProjects projects={data.projects.filter(x=>projectIdsOf(me).includes(x.id))} me={me} members={data.members} busy={busy||workshop.busy} onLobby={()=>navigate('projects')} onOpen={async x=>{if(x.id===me.projectId||await workshop.run({type:'enterProject',projectId:x.id}))setEntered(true);}}/>:project?<ProjectSteps onBack={()=>setEntered(false)} key={me.id+project.id} project={project} workspace={data} {...workshop} run={stepRun} initialStep={projectStep} onStepChange={setProjectStep} onGallery={()=>navigate('gallery')} busy={busy||workshop.busy} preview={preview} saveIdea={run} onIdea={id=>{setSelected(id);setComment('');}} onNavigate={(tab,docKey,target)=>{setWorkshopTab({id:tab,docKey,target,revision:Date.now()});navigate('workshop');if(!target)window.scrollTo({top:0});}}/>:simple?<ProjectLobby key={me.id+'-dash'} workspace={data} records={workshop.records} busy={busy||workshop.busy} preview={preview} invite={invite} run={workshop.run} onInviteHandled={clearInvite} onEnter={()=>{setSpace('project');setEntered(true);window.scrollTo({top:0});}}/>:<ProjectStepsEmpty onLobby={()=>navigate('projects')}/>)}
+ {view==='dashboard'&&space==='project'&&(!entered&&projectIdsOf(me).length?<MyProjects projects={data.projects.filter(x=>projectIdsOf(me).includes(x.id))} me={me} members={data.members} busy={busy||workshop.busy} onLobby={()=>navigate('projects')} onOpen={async x=>{if(x.id===me.projectId||await workshop.run({type:'enterProject',projectId:x.id}))setEntered(true);}}/>:project?<ProjectSteps onBack={()=>setEntered(false)} key={me.id+project.id} project={project} workspace={data} {...workshop} run={stepRun} initialStep={projectStep} initialVoteId={sharedVote?.projectId===project.id?sharedVote.voteId:undefined} onStepChange={setProjectStep} onGallery={()=>navigate('gallery')} busy={busy||workshop.busy} preview={preview} saveIdea={run} onIdea={id=>{setSelected(id);setComment('');}} onNavigate={(tab,docKey,target)=>{setWorkshopTab({id:tab,docKey,target,revision:Date.now()});navigate('workshop');if(!target)window.scrollTo({top:0});}}/>:simple?<ProjectLobby key={me.id+'-dash'} workspace={data} records={workshop.records} busy={busy||workshop.busy} preview={preview} invite={invite} run={workshop.run} onInviteHandled={clearInvite} onEnter={()=>{setSpace('project');setEntered(true);window.scrollTo({top:0});}}/>:<ProjectStepsEmpty onLobby={()=>navigate('projects')}/>)}
  {view==='dashboard'&&space!=='project'&&<JourneyBoard key={me.id} workspace={data} {...workshop} busy={busy||workshop.busy} preview={preview} scope={space} startRequest={startRequest} saveIdea={run} loadMore={loadOlder} onIdea={id=>{setSelected(id);setComment('');}} onNavigate={(tab,docKey,target)=>{setWorkshopTab({id:tab,docKey,target,revision:Date.now()});navigate('workshop');if(!target)window.scrollTo({top:0});}}/>}
  {view==='workshop'&&<button className="journey-back" onClick={()=>navigate('dashboard')}><ArrowLeft size={17}/> 어디서부터 시작할까요? 단계별 활동 보드로</button>}
  {!simple&&!(view==='dashboard'&&space==='project')&&view!=='gallery'&&<ArenaProfile workspace={data} records={workshop.records} space={space} compact onCharacter={()=>{setError('');setCharacterOpen(true);}} onIdeas={()=>navigate('ideas')} onStage={tab=>{setWorkshopTab({id:tab,revision:Date.now()});navigate('workshop');}}/>}
