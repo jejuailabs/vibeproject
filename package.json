@@ -10,6 +10,7 @@
     "test": "tsx --test tests/*.test.ts",
     "bootstrap:admin": "node --env-file=.env.local scripts/bootstrap-admin.mjs",
     "test:e2e": "playwright test",
+    "test:vote-latency": "playwright test -c e2e/vote-latency.config.ts",
     "test:enrollment": "node --env-file=.env.local --conditions=react-server --import tsx tests/enrollment.integration.ts",
     "test:integration": "node --env-file=.env.local --conditions=react-server --import tsx tests/workshop.integration.ts",
     "test:projects": "node --env-file=.env.local --conditions=react-server --import tsx tests/projects.integration.ts",

@@ -310,3 +310,43 @@ test('a room ID cannot be used through another project or by a member to manage 
   if(type!=='castTeamVote')await assert.rejects(run(s,'seo',{type,projectId:'p-onboarding',voteId}),/팀장/);
  }
 });
+
+test('casting returns the committed room and only the caller ballot, including cancellation',async()=>{
+ const w=previewWorkspace();
+ const card=structuredClone(w.ideas.find(i=>i.id==='i1')!);
+ Object.assign(card,{id:'response-card',ownerId:'seo',projectId:'p-onboarding',scope:'project'});w.ideas.push(card);
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ const voteId=vote(s).id;
+ s=await run(s,'jun',{type:'castTeamVote',projectId:'p-onboarding',voteId,ideaId:card.id});
+ const otherBallot=structuredClone(s.records.find(r=>r.kind==='teamBallot'&&r.ownerId==='jun')!);
+ const previousRevision=vote(s).revision;
+ s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',voteId,ideaId:card.id});
+ const result=s.result as {id:string;records:(RecordOf<'teamVote'>|RecordOf<'teamBallot'>)[]};
+ assert.equal(result.id,'p-onboarding');
+ assert.equal(result.records.length,2);
+ const room=result.records.find((r):r is RecordOf<'teamVote'>=>r.kind==='teamVote')!;
+ const ballot=result.records.find((r):r is RecordOf<'teamBallot'>=>r.kind==='teamBallot')!;
+ assert.deepEqual(room,vote(s));
+ assert.equal(room.revision,previousRevision+1);
+ assert.equal(room.data.counts[card.id],2);
+ assert.equal(room.data.voters,2);
+ assert.equal(ballot.ownerId,'seo');
+ assert.equal(ballot.data.voteId,voteId);
+ assert.deepEqual(ballot.data.ideaIds,[card.id]);
+ assert.deepEqual(ballot,s.records.find(r=>r.id===ballot.id));
+ assert.equal(result.records.some(r=>r.id===otherBallot.id),false);
+ assert.deepEqual(s.records.find(r=>r.id===otherBallot.id),otherBallot);
+ // The patch is JSON-safe, as required by the response and stored idempotency result.
+ assert.deepEqual(JSON.parse(JSON.stringify(result)),result);
+ s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',voteId,ideaId:card.id});
+ const cancelled=s.result as typeof result;
+ const cancelledRoom=cancelled.records.find((r):r is RecordOf<'teamVote'>=>r.kind==='teamVote')!;
+ const cancelledBallot=cancelled.records.find((r):r is RecordOf<'teamBallot'>=>r.kind==='teamBallot')!;
+ assert.deepEqual(cancelledRoom,vote(s));
+ assert.equal(cancelledRoom.data.counts[card.id],1);
+ assert.equal(cancelledRoom.data.voters,1);
+ assert.equal(cancelledBallot.revision,ballot.revision+1);
+ assert.deepEqual(cancelledBallot.data.ideaIds,[]);
+ assert.equal(cancelled.records.some(r=>r.id===otherBallot.id),false);
+});

@@ -9,6 +9,8 @@ import type {
   Context,
 } from "@/lib/workshop/model";
 import { previewWorkshop } from "@/lib/workshop/memory";
+import { mergeRecordUpdates } from "@/lib/workshop/record-updates";
+import { useVoteQueue } from "./use-vote-queue";
 import { canRead } from "@/lib/workshop/core";
 import { baselineArchive } from "@/lib/workshop/export";
 import { basicCard, basicCoach, basicDraft, type CardInput, type CardReply, type CoachInput, type CoachReply, type DraftInput, type DraftReply } from "@/lib/coaching";
@@ -37,8 +39,21 @@ export function useWorkshop({
     [busy, setBusy] = useState(false),
     pending = useRef<{ key: string; id: string } | null>(null),
     localFiles = useRef(new Map<string, File>());
+  const previewState = useRef({ workspace: data, records });
+  previewState.current = { workspace: data, records };
+  const updates = useRef(new Map<string, WorkshopRecord>());
+  const refreshSequence = useRef(0);
+  const identity = cohortId + ":" + (user?.uid ?? data?.me.id ?? "");
+  const currentIdentity = useRef(identity);
+  if (currentIdentity.current !== identity) {
+    currentIdentity.current = identity;
+    updates.current.clear();
+  }
   const refresh = useCallback(async () => {
     if (!user || preview) return;
+    const startedFor = cohortId + ":" + user.uid;
+    if (startedFor !== currentIdentity.current) return;
+    const sequence = ++refreshSequence.current;
     let cursor: string | null = null,
       all: WorkshopRecord[] = [];
     do {
@@ -52,6 +67,7 @@ export function useWorkshop({
         },
       );
       const v: Snapshot & { error?: string } = await response.json();
+      if (startedFor !== currentIdentity.current) return;
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           setRecords([]);
@@ -64,7 +80,14 @@ export function useWorkshop({
       setInvites(v.invites);
       setAi(v.ai);
     } while (cursor);
-    setRecords(all);
+    if (startedFor !== currentIdentity.current || sequence !== refreshSequence.current) return;
+    const protectedRecords = mergeRecordUpdates(all, [...updates.current.values()]);
+    // Retain only patches a poll has not caught up with yet.
+    for (const record of all) {
+      const update = updates.current.get(record.id);
+      if (update && record.revision >= update.revision) updates.current.delete(record.id);
+    }
+    setRecords(protectedRecords);
   }, [user, preview, cohortId, setData]);
   useEffect(() => {
     if (!user && !preview) {
@@ -79,16 +102,21 @@ export function useWorkshop({
     return () => clearInterval(timer);
   }, [refresh, user, preview, setError]);
   async function run(command: unknown) {
+    const startedFor = identity;
+    if (startedFor !== currentIdentity.current) return false;
     setBusy(true);
     setError("");
     let denied: { denied?: boolean; message?: string } | null = null;
     try {
       if (preview) {
-        if (!data) throw new Error("작업 공간이 없습니다.");
+        const current = previewState.current;
+        if (!current.workspace) throw new Error("작업 공간이 없습니다.");
         const result = await previewWorkshop(
-          { workspace: data, records },
+          { workspace: current.workspace, records: current.records },
           command,
         );
+        if (startedFor !== currentIdentity.current) return false;
+        previewState.current = result;
         setData(result.workspace);
         setRecords(result.records);
         denied = (result.result as { denied?: boolean; message?: string } | null) || null;
@@ -97,6 +125,7 @@ export function useWorkshop({
         const key = JSON.stringify(command);
         if (pending.current?.key !== key)
           pending.current = { key, id: crypto.randomUUID() };
+        const request = pending.current;
         const isAI = (command as any)?.type === "analyze";
         const { type: aiType, ...aiCommand } = command as any;
         const response: Response = await fetch(
@@ -109,17 +138,27 @@ export function useWorkshop({
             },
             body: JSON.stringify(
               isAI
-                ? { cohortId, requestId: pending.current.id, ...aiCommand }
-                : { cohortId, requestId: pending.current.id, command },
+                ? { cohortId, requestId: request.id, ...aiCommand }
+                : { cohortId, requestId: request.id, command },
             ),
           },
         );
         const value = await response.json();
+        if (startedFor !== currentIdentity.current) return false;
         if (!response.ok) throw new Error(value.error);
-        pending.current = null;
+        if (pending.current === request) pending.current = null;
         denied = value;
-        await Promise.all([refresh(), reload(user)]);
+        if ((command as { type?: string })?.type === "castTeamVote" && Array.isArray(value.records)) {
+          for (const record of value.records as WorkshopRecord[]) {
+            const prior = updates.current.get(record.id);
+            if (!prior || record.revision >= prior.revision) updates.current.set(record.id, record);
+          }
+          setRecords((current) => mergeRecordUpdates(current, value.records));
+        } else {
+          await Promise.all([refresh(), reload(user)]);
+        }
       }
+      if (startedFor !== currentIdentity.current) return false;
       if (denied?.denied) {
         setError(denied.message || "요청을 처리하지 못했습니다.");
         return false;
@@ -131,10 +170,10 @@ export function useWorkshop({
       );
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "입력 내용을 확인해주세요.");
+      if (startedFor === currentIdentity.current) setError(e instanceof Error ? e.message : "입력 내용을 확인해주세요.");
       return false;
     } finally {
-      setBusy(false);
+      if (startedFor === currentIdentity.current) setBusy(false);
     }
   }
   // The coach only suggests text; nothing is saved until the writer saves the form.
@@ -334,6 +373,8 @@ export function useWorkshop({
       setBusy(false);
     }
   }
+  const voteQueue = useVoteQueue(run, identity);
+  useEffect(() => { setBusy(false); pending.current = null; }, [identity]);
   const visible =
     preview && data
       ? records.filter(
@@ -362,6 +403,7 @@ export function useWorkshop({
     invites,
     ai,
     busy,
+    voteQueue,
     run,
     askCoach,
     makeCard,

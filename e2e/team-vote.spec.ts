@@ -27,7 +27,14 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await addProblem(page, '신규 참가자 안내');
   await page.getByRole('navigation', { name: '단계 이동' }).getByRole('button', { name: /최종 아이디어·투표/ }).click();
 
-  const room = (n: number) => page.locator('.vote-card').filter({ has: page.getByRole('heading', { name: `${n}번째 투표`, exact: true }) });
+  const roomIds: string[] = [];
+  const rememberRoom = async () => {
+    const rooms = page.locator('.vote-card[data-vote-id]');
+    await expect(rooms).toHaveCount(roomIds.length + 1);
+    const ids = await rooms.evaluateAll((elements) => elements.map((element) => element.getAttribute('data-vote-id')!));
+    roomIds.push(ids.find((id) => !roomIds.includes(id))!);
+  };
+  const room = (n: number) => page.locator(`.vote-card[data-vote-id="${roomIds[n - 1]}"]`);
   const firstCard = () => page.locator('.vote-tile').filter({ has: page.getByRole('heading', { name: /첫 모임의 대화/ }) });
   const picker = page.getByRole('dialog', { name: '투표 후보 고르기', exact: true });
   await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
@@ -38,6 +45,7 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await picker.getByRole('button', { name: '전체 선택', exact: true }).click();
   await picker.getByRole('button', { name: '2장으로 투표 시작', exact: true }).click();
   await expect(picker).not.toBeVisible();
+  await rememberRoom();
   await room(1).getByRole('button', { name: '투표하러 가기' }).click();
   await firstCard().getByRole('button', { name: '투표', exact: true }).click();
   await expect(page.locator('.pj-vote')).toContainText('내가 고른 카드 1/1');
@@ -56,6 +64,7 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
   await picker.getByLabel('새 투표의 한 사람당 투표 수').selectOption('2');
   await picker.getByRole('button', { name: '2장으로 투표 시작', exact: true }).click();
+  await rememberRoom();
   await expect(page.locator('.vote-card.open')).toHaveCount(2);
   await expect(room(1)).toContainText('1/2명 참여 · 한 사람당 1표');
   await expect(room(2)).toContainText('0/2명 참여 · 한 사람당 2표');
@@ -76,14 +85,14 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await expect(room(1)).toContainText('투표 마감');
   // A closed vote's dashboard becomes the result report, which prints on its own as a PDF.
   await room(1).getByRole('button', { name: '대시보드', exact: true }).click();
-  await expect(dash.getByRole('heading', { name: '1번째 투표 결과', exact: true })).toBeVisible();
+  await expect(dash.getByRole('heading', { name: /투표 결과$/ })).toBeVisible();
   await expect(dash.locator('.vote-dash-clock.win')).toContainText('첫 모임의 대화');
   await expect(dash.locator('.vote-dash-bars li').first()).toContainText('TOP 5');
   await expect(dash.locator('.vote-dash-stat').nth(1)).toContainText('기권 1명');
   await page.screenshot({ path: 'work/team-vote-report-desktop.png' });
   await page.evaluate(() => { window.print = () => { (window as unknown as { printed: string }).printed = (document.querySelector('body > .vote-print') as HTMLElement | null)?.innerText || ''; }; });
   await dash.getByRole('button', { name: 'PDF로 저장', exact: true }).click();
-  expect(await page.evaluate(() => (window as unknown as { printed: string }).printed)).toContain('1번째 투표 결과');
+  expect(await page.evaluate(() => (window as unknown as { printed: string }).printed)).toContain('투표 결과');
   await expect(page.locator('body > .vote-print')).toHaveCount(0);  await dash.getByRole('button', { name: '닫기', exact: true }).click();
   await expect(room(2)).toContainText('투표 중');
 
@@ -106,6 +115,7 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
   await picker.getByRole('checkbox', { name: /첫 모임의 대화/ }).uncheck();
   await picker.getByRole('button', { name: '1장으로 투표 시작', exact: true }).click();
+  await rememberRoom();
   await expect(room(3)).toContainText('후보 문제 카드 1장');
   page.once('dialog', dialog => dialog.accept());
   await room(1).getByRole('button', { name: '투표 삭제', exact: true }).click();
@@ -133,7 +143,7 @@ test('after a vote closes, members choose team or solo under a nickname and ever
   await page.getByLabel('미리보기 참가자').selectOption('jun');
   await page.getByRole('navigation', { name: '단계 이동' }).getByRole('button', { name: /최종 아이디어·투표/ }).click();
 
-  const room = page.locator('.vote-card').filter({ has: page.getByRole('heading', { name: '1번째 투표', exact: true }) });
+  const room = page.locator('.vote-card[data-vote-id]');
   await page.getByRole('button', { name: '새 투표 열기', exact: true }).click();
   const picker = page.getByRole('dialog', { name: '투표 후보 고르기', exact: true });
   await picker.getByLabel('새 투표의 투표 시간').selectOption('0');
@@ -146,7 +156,7 @@ test('after a vote closes, members choose team or solo under a nickname and ever
   const dash = page.getByRole('dialog', { name: '투표 대시보드', exact: true });
   page.once('dialog', (d) => d.accept());
   await dash.getByRole('button', { name: '투표 종료', exact: true }).click();
-  await expect(dash.getByRole('heading', { name: '1번째 투표 결과', exact: true })).toBeVisible();
+  await expect(dash.getByRole('heading', { name: /투표 결과$/ })).toBeVisible();
   await dash.getByRole('button', { name: '닫기', exact: true }).click();
 
   // The leader opens the team-or-solo vote and picks team.
@@ -232,7 +242,7 @@ test('the leader checks which newly finished cards join an open vote, newest edi
   await addProblem(page, '두 번째 카드');
   await addProblem(page, '세 번째 카드');
   await toVote();
-  const room = page.locator('.vote-card').filter({ has: page.getByRole('heading', { name: '1번째 투표', exact: true }) });
+  const room = page.locator('.vote-card[data-vote-id]');
   await room.getByRole('button', { name: '투표하러 가기' }).click();
   await page.getByRole('button', { name: '새로 완성된 카드 2개 후보에 추가' }).click();
   const add = page.getByRole('dialog', { name: '후보 카드 추가', exact: true });

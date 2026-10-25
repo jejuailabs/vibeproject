@@ -410,6 +410,11 @@
 .join-unassigned{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:18px 0 0;font-size:13px}
 .modal.vote-picker{width:min(560px,calc(100vw - 32px));padding:24px 26px;background:#fff;color:#2f2840;border:0}
 .vote-picker h3{margin:0 0 4px;font-size:19px}
+.vote-name{display:block;margin:16px 0;color:#3e3249;font-size:13px;font-weight:700}
+.vote-name>span,.vote-name>small{color:#7a6f8a;font-weight:400}
+.vote-name>input{display:block;width:100%;box-sizing:border-box;margin:7px 0;padding:10px 12px;border:1px solid #d9cde7;border-radius:9px;background:#fff;color:#2f2840;color-scheme:light;font:inherit;font-weight:400}
+.vote-name>small{display:block;font-size:12px}
+.vote-card h3,.vote-board-title,.vote-dash-head h2{overflow-wrap:anywhere}
 .vote-picker .vote-detail-head{align-items:flex-start;gap:12px}
 .vote-picker .vote-detail-head small{color:#6f6480;font-size:12px}
 .vote-picker-bar{display:flex;align-items:center;gap:12px;padding-bottom:10px;border-bottom:1px solid #eee7f4;font-size:13px}
