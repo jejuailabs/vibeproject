@@ -15,7 +15,7 @@ const users = {
   seo: { uid: "seo", getIdToken: async () => "local-test-seo" } as User,
 };
 const noop = () => {};
-type FixtureOptions = { signedOut?: boolean; currentProject?: string; nonmember?: boolean };
+type FixtureOptions = { signedOut?: boolean; currentProject?: string; nonmember?: boolean; ownCard?: boolean };
 const fixtureOptions = () => (window as Window & { voteFixture?: FixtureOptions }).voteFixture ?? {};
 
 function workspace(): Workspace {
@@ -33,7 +33,7 @@ function workspace(): Workspace {
     ...structuredClone(sample),
     id: "card-" + label.toLowerCase(),
     title: "후보 " + label,
-    ownerId: "seo",
+    ownerId: options.ownCard && label === "A" ? "jun" : "seo",
     scope: "project",
     projectId: "p-onboarding",
   }));
@@ -83,6 +83,8 @@ export default function VoteLatencyFixture() {
     <output data-testid="notice">{notice}</output>
     <output data-testid="error">{error}</output>
     <output data-testid="saved-picks">{JSON.stringify(workshop.records.find((r) => r.kind === "teamBallot")?.data)}</output>
+    <output data-testid="saved-path">{JSON.stringify(workshop.records.find((r) => r.kind === "pathVote")?.data)}</output>
+    <output data-testid="saved-join">{JSON.stringify(workshop.records.find((r) => r.kind === "joinBoard")?.data)}</output>
     {visible && data && project && <ProjectSteps key={project.id} workspace={data} project={project} {...workshop} initialVoteId={sharedTarget?.voteId}
       preview={false} initialStep="confirm" saveIdea={async () => false}
       onStepChange={noop} onIdea={noop} onNavigate={noop} onGallery={noop} />}

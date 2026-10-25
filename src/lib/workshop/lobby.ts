@@ -240,11 +240,11 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       const id = "teamvote-" + c.requestId;
       const maxVotes = Math.min(cmd.maxVotes || 1, ideas.length);
       const endsAt = cmd.minutes ? new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString() : null;
-      write(c, id, "teamVote", { round, ...(cmd.title ? { title: cmd.title } : {}), state: "open", candidateIds: ideas.map((i) => i.id), counts: {}, voters: 0, openedAt: c.now, closedAt: null, maxVotes, endsAt }, "project", p.id);
+      const openedVote = write(c, id, "teamVote", { round, ...(cmd.title ? { title: cmd.title } : {}), state: "open", candidateIds: ideas.map((i) => i.id), counts: {}, voters: 0, openedAt: c.now, closedAt: null, maxVotes, endsAt }, "project", p.id);
       c.store.write(counterPath, { round });
       event(c, "투표 열기", "문제 카드 " + ideas.length + "개 · 1인당 " + maxVotes + "표", p.id, p.id);
       for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "리더가 함께 풀 문제 투표를 열었습니다.", p.id, "project");
-      return { id };
+      return { id, records: [openedVote] };
     }
     case "castTeamVote": {
       const p = await project(c, cmd.projectId);
@@ -282,27 +282,27 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       if (cmd.ideaIds?.some((id) => !fresh.includes(id))) fail("후보가 아닌 완성된 문제 카드만 추가할 수 있습니다.");
       const added = cmd.ideaIds ? fresh.filter((id) => cmd.ideaIds!.includes(id)) : fresh;
       if (!added.length) fail("새로 추가할 완성된 문제 카드가 없습니다.");
-      write(c, vote.id, "teamVote", { ...vote.data, candidateIds: [...vote.data.candidateIds, ...added] }, "project", p.id, vote.ownerId, vote);
+      const updatedVote = write(c, vote.id, "teamVote", { ...vote.data, candidateIds: [...vote.data.candidateIds, ...added] }, "project", p.id, vote.ownerId, vote);
       event(c, "투표 후보 추가", "문제 카드 " + added.length + "개", p.id, p.id);
-      return { id: p.id };
+      return { id: p.id, records: [updatedVote] };
     }
     case "cancelTeamVote": {
       // Throws the open vote away without a result; a new vote starts a new round, so old ballots no longer count.
       const p = await project(c, cmd.projectId, "leader");
       const vote = await teamVote(c, p.id, cmd.voteId);
       if (vote?.data.state !== "open") fail("열려 있는 투표가 없습니다.");
-      write(c, vote.id, "teamVote", { ...vote.data, state: "cancelled", counts: {}, voters: 0, closedAt: c.now }, "project", p.id, vote.ownerId, vote);
+      const updatedVote = write(c, vote.id, "teamVote", { ...vote.data, state: "cancelled", counts: {}, voters: 0, closedAt: c.now }, "project", p.id, vote.ownerId, vote);
       event(c, "투표 취소", vote.data.voters + "명 참여 중 취소", p.id, p.id);
-      return { id: p.id };
+      return { id: p.id, records: [updatedVote] };
     }
     case "deleteTeamVote": {
       // Removes the vote from the team's view. The round number is kept so old ballots never count in a later vote.
       const p = await project(c, cmd.projectId, "leader");
       const vote = await teamVote(c, p.id, cmd.voteId);
       if (!vote || vote.data.state === "deleted") fail("지울 투표가 없습니다.");
-      write(c, vote.id, "teamVote", { ...vote.data, state: "deleted", candidateIds: [], counts: {}, voters: 0, closedAt: vote.data.closedAt || c.now }, "project", p.id, vote.ownerId, vote);
+      const updatedVote = write(c, vote.id, "teamVote", { ...vote.data, state: "deleted", candidateIds: [], counts: {}, voters: 0, closedAt: vote.data.closedAt || c.now }, "project", p.id, vote.ownerId, vote);
       event(c, "투표 삭제", vote.data.title || "문제 선정 투표", p.id, p.id);
-      return { id: p.id };
+      return { id: p.id, records: [updatedVote] };
     }
     case "closeTeamVote": {
       // The leader closes any time; once the deadline passes any member's screen may close it.
@@ -317,9 +317,9 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
         .map((t) => ({ ...t, rank: tally.filter((o) => o.votes > t.votes).length + 1 }))
         .filter((t) => t.votes > 0 && t.rank <= 5)
         .sort((a, b) => a.rank - b.rank);
-      write(c, vote.id, "teamVote", { ...vote.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual", top }, "project", p.id, vote.ownerId, vote);
+      const updatedVote = write(c, vote.id, "teamVote", { ...vote.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual", top }, "project", p.id, vote.ownerId, vote);
       event(c, "투표 마감", vote.data.voters + "명 참여 · 기권 " + abstained + "명" + (timeUp ? " · 시간 종료" : ""), p.id, p.id);
-      return { id: p.id };
+      return { id: p.id, records: [updatedVote] };
     }
     case "openPathVote": {
       // One team-or-solo vote follows each closed main vote.
@@ -329,10 +329,10 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       const id = "pathvote-" + vote.id;
       if (await optional(c, id, "pathVote")) fail("이 투표의 팀·개별 투표는 이미 열었습니다.");
       const endsAt = cmd.minutes ? new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString() : null;
-      write(c, id, "pathVote", { voteId: vote.id, round: vote.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, picks: {} }, "project", p.id);
+      const openedPath = write(c, id, "pathVote", { voteId: vote.id, round: vote.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, picks: {} }, "project", p.id);
       event(c, "팀·개별 투표 열기", vote.data.title || "문제 선정 투표 결과", p.id, p.id);
       for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "팀으로 갈지 개별로 갈지 골라주세요.", p.id, "project");
-      return { id };
+      return { id, records: [openedPath] };
     }
     case "pickPath": {
       const p = await project(c, cmd.projectId);
@@ -348,8 +348,8 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
         ideaId = cmd.ideaId;
       }
       const pick = { nickname: cmd.nickname.trim(), choice: cmd.choice, ...(ideaId ? { ideaId } : {}) };
-      write(c, pv.id, "pathVote", { ...pv.data, picks: { ...pv.data.picks, [c.uid]: pick } }, "project", p.id, pv.ownerId, pv);
-      return { id: pv.id };
+      const updatedPath = write(c, pv.id, "pathVote", { ...pv.data, picks: { ...pv.data.picks, [c.uid]: pick } }, "project", p.id, pv.ownerId, pv);
+      return { id: pv.id, records: [updatedPath] };
     }
     case "closePathVote": {
       const p = await project(c, cmd.projectId);
@@ -359,9 +359,9 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       const timeUp = !!pv.data.endsAt && pv.data.endsAt <= c.now;
       if (p.leaderId !== c.uid && !timeUp) fail("팀장이 확정할 수 있습니다.", 403);
       const picks = Object.values(pv.data.picks), abstained = Math.max(0, p.memberIds.length - picks.length);
-      write(c, pv.id, "pathVote", { ...pv.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual" }, "project", p.id, pv.ownerId, pv);
+      const updatedPath = write(c, pv.id, "pathVote", { ...pv.data, state: "closed", closedAt: c.now, abstained, endedBy: timeUp ? "time" : "manual" }, "project", p.id, pv.ownerId, pv);
       event(c, "팀·개별 투표 마감", "팀 " + picks.filter((x) => x.choice === "team").length + "명 · 개별 " + picks.filter((x) => x.choice === "solo").length + "명 · 기권 " + abstained + "명", p.id, p.id);
-      return { id: pv.id };
+      return { id: pv.id, records: [updatedPath] };
     }
     case "openJoinBoard": {
       // The board lists the main vote's top 5 and every solo card; solo choosers start in their own project.
@@ -386,10 +386,10 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       }
       if (!options.length) fail("참가할 프로젝트가 없습니다. 1~5등 카드나 개별 프로젝트가 있어야 해요.");
       const endsAt = cmd.minutes ? new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString() : null;
-      write(c, id, "joinBoard", { pathId: pv.id, voteId: pv.data.voteId, round: pv.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, capacity: cmd.capacity, options, picks }, "project", p.id);
+      const openedBoard = write(c, id, "joinBoard", { pathId: pv.id, voteId: pv.data.voteId, round: pv.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, capacity: cmd.capacity, options, picks }, "project", p.id);
       event(c, "프로젝트 참가 받기", "프로젝트 " + options.length + "개 · 정원 " + cmd.capacity + "명", p.id, p.id);
       for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "참가할 프로젝트를 골라주세요.", p.id, "project");
-      return { id };
+      return { id, records: [openedBoard] };
     }
     case "pickJoin": {
       // Picking the project I am in again takes me out; solo choosers stay in their own project.
@@ -407,8 +407,8 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
         if (taken >= jb.data.capacity) fail("정원이 가득 찼습니다.");
         picks[c.uid] = { ideaId: cmd.ideaId, at: c.now };
       }
-      write(c, jb.id, "joinBoard", { ...jb.data, picks }, "project", p.id, jb.ownerId, jb);
-      return { id: jb.id };
+      const updatedBoard = write(c, jb.id, "joinBoard", { ...jb.data, picks }, "project", p.id, jb.ownerId, jb);
+      return { id: jb.id, records: [updatedBoard] };
     }
     case "closeJoinBoard": {
       // Each project with at least one member becomes a real project; the card's author leads it if they joined, else the earliest joiner.

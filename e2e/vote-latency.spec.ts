@@ -30,6 +30,7 @@ async function mockWorkshop(page: Page, options: {
   maxVotes?: number;
   saveDelay?: number;
   failAt?: number;
+  failMessage?: string;
   holdSave?: ReturnType<typeof deferred>;
   stalePoll?: ReturnType<typeof deferred>;
   holdInitial?: ReturnType<typeof deferred>;
@@ -39,6 +40,8 @@ async function mockWorkshop(page: Page, options: {
     records: structuredClone(options.records ?? initialRecords(options.picks, options.maxVotes)),
     gets: 0, completed: 0, active: 0, maxActive: 0, holdPoll: false,
     commands: [] as { ideaId: string; requestId: string }[],
+    selections: [] as { type: string; ideaId?: string; choice?: string; requestId: string }[],
+    selectionsCompleted: 0,
     unexpected: [] as string[],
   };
   // Every request is either served locally or rejected. No Firebase, AI, storage,
@@ -61,6 +64,33 @@ async function mockWorkshop(page: Page, options: {
       return route.fulfill({ json: { records, nextCursor: null, ai: { enabled: false, model: "" } } });
     }
     const body = request.postDataJSON();
+    if (body.command?.type === "pickJoin" || body.command?.type === "pickPath") {
+      const command = body.command;
+      state.selections.push({ ...command, requestId: body.requestId });
+      const index = state.selections.length;
+      state.active++;
+      state.maxActive = Math.max(state.maxActive, state.active);
+      if (options.holdSave) await options.holdSave.promise;
+      else await delay(options.saveDelay ?? 2500);
+      if (index === options.failAt) {
+        state.active--;
+        state.selectionsCompleted++;
+        return route.fulfill({ status: 409, json: { error: options.failMessage || "테스트 저장 실패" } });
+      }
+      const actor = request.headers().authorization?.endsWith("local-test-seo") ? "seo" : "jun";
+      const record = state.records.find((candidate) => candidate.id === (command.boardId || command.pathId));
+      if (record?.kind === "joinBoard" && command.type === "pickJoin") {
+        if (record.data.picks[actor]?.ideaId === command.ideaId) delete record.data.picks[actor];
+        else record.data.picks[actor] = { ideaId: command.ideaId, at: new Date().toISOString() };
+      } else if (record?.kind === "pathVote" && command.type === "pickPath") {
+        record.data.picks[actor] = { nickname: command.nickname, choice: command.choice,
+          ...(command.choice === "solo" ? { ideaId: command.ideaId } : {}) };
+      } else throw new Error("Selection fixture record missing");
+      record.revision++;
+      state.active--;
+      state.selectionsCompleted++;
+      return route.fulfill({ json: { id: record.id, records: [structuredClone(record)] } });
+    }
     if (body.command?.type !== "castTeamVote") {
       state.unexpected.push(JSON.stringify(body));
       return route.fulfill({ status: 500, json: { error: "Unexpected test command" } });
@@ -101,8 +131,8 @@ async function enterVote(page: Page) {
   await expect(page.locator(".vote-tile")).toHaveCount(4);
 }
 const card = (page: Page, label: string) => page.locator(".vote-tile").filter({ has: page.getByRole("heading", { name: new RegExp("후보 " + label) }) });
-const choose = (page: Page, label: string) => card(page, label).getByRole("button", { name: "투표", exact: true }).click({ timeout: 700 });
-const cancel = (page: Page, label: string) => card(page, label).getByRole("button", { name: "내 선택 · 취소", exact: true }).click({ timeout: 700 });
+const choose = (page: Page, label: string) => card(page, label).getByRole("button", { name: "투표", exact: true }).click({ timeout: 5000 });
+const cancel = (page: Page, label: string) => card(page, label).getByRole("button", { name: "내 선택 · 취소", exact: true }).click({ timeout: 5000 });
 async function selected(page: Page, labels: string[]) {
   await expect(page.locator(".pj-vote")).toContainText(`내가 고른 카드 ${labels.length}/`, { timeout: 700 });
   for (const label of ["A", "B", "C", "D"]) {
@@ -351,4 +381,160 @@ test("shared vote reports missing or deleted rooms after records finish loading"
     await expect(page.locator(".vote-board-title")).toHaveCount(0);
     await expect(page.locator(".vote-tile")).toHaveCount(0);
   }
+});
+
+function selectionRecords(options: { join?: boolean; savedJoin?: string } = {}): WorkshopRecord[] {
+  const records = initialRecords();
+  const vote = records[0] as RecordOf<"teamVote">;
+  vote.data.state = "closed";
+  vote.data.title = "함께 만들 프로젝트";
+  vote.data.closedAt = date;
+  const shared = { scope: "project" as const, projectId: "p-onboarding", ownerId: "jun", revision: 1, createdAt: date, updatedAt: date };
+  const path: RecordOf<"pathVote"> = {
+    ...shared, kind: "pathVote", id: "path-local",
+    data: { voteId: vote.id, round: 1, state: options.join ? "closed" : "open",
+      openedAt: date, closedAt: options.join ? date : null, endsAt: null,
+      picks: options.join ? { jun: { nickname: "준", choice: "team" }, seo: { nickname: "서", choice: "team" } } : {} },
+  };
+  records.push(path);
+  if (options.join) records.push({
+    ...shared, kind: "joinBoard", id: "join-local",
+    data: { pathId: path.id, voteId: vote.id, round: 1, state: "open", openedAt: date,
+      closedAt: null, endsAt: null, capacity: 3,
+      options: ["A", "B", "C"].map((label, index) => ({ ideaId: "card-" + label.toLowerCase(),
+        title: "프로젝트 " + label, problem: "함께 해결할 문제 " + label, ownerId: "seo", rank: index + 1 })),
+      picks: { seo: { ideaId: "card-b", at: date },
+        ...(options.savedJoin ? { jun: { ideaId: options.savedJoin, at: date } } : {}) } },
+  });
+  return records;
+}
+
+const joinDialog = (page: Page) => page.getByRole("dialog", { name: "선정 프로젝트", exact: true });
+const joinCard = (page: Page, label: string) => joinDialog(page).locator(".join-card").filter({
+  has: page.getByRole("heading", { name: "프로젝트 " + label, exact: true }),
+});
+const join = (page: Page, label: string) => joinCard(page, label).getByRole("button", { name: "참가", exact: true }).click({ timeout: 5000 });
+const cancelJoin = (page: Page, label: string) => joinCard(page, label).getByRole("button", { name: "참가함 · 취소", exact: true }).click({ timeout: 5000 });
+async function openJoin(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: /^선정 프로젝트 참가하기/ }).click();
+  await expect(joinDialog(page)).toBeVisible();
+}
+async function joinState(page: Page, selected: string | null) {
+  for (const label of ["A", "B", "C"]) {
+    const item = joinCard(page, label);
+    const count = Number(label === "B") + Number(label === selected);
+    await expect(item.locator(".join-people b")).toHaveText(`${count}/3명`, { timeout: 700 });
+    if (label === selected) {
+      await expect(item).toHaveClass(/\bhere\b/, { timeout: 700 });
+      await expect(item.locator(".join-people").getByText("준", { exact: true })).toBeVisible({ timeout: 700 });
+    } else {
+      await expect(item).not.toHaveClass(/\bhere\b/, { timeout: 700 });
+      await expect(item.locator(".join-people").getByText("준", { exact: true })).toHaveCount(0);
+    }
+  }
+  await expect(joinCard(page, "B").locator(".join-people").getByText("서", { exact: true })).toBeVisible();
+  await expect(joinDialog(page).locator(".join-unassigned")).toContainText(`미배정 ${selected ? 0 : 1}명`, { timeout: 700 });
+}
+
+test("join switch and cancel update counts and rosters immediately during 2.5s saves", async ({ page }) => {
+  const state = await mockWorkshop(page, { records: selectionRecords({ join: true }) });
+  await openJoin(page);
+  const initialGets = state.gets;
+  await join(page, "A");
+  await joinState(page, "A");
+  await join(page, "B");
+  await joinState(page, "B");
+  await cancelJoin(page, "B");
+  await joinState(page, null);
+  expect(state.selectionsCompleted).toBe(0);
+  await expect(joinDialog(page).getByRole("status")).toHaveText("참가 선택 저장 중…");
+  await expect(joinDialog(page).getByRole("button", { name: "참가 받기 종료 · 프로젝트 만들기", exact: true })).toBeDisabled();
+  await expect.poll(() => state.selectionsCompleted, { timeout: 12000 }).toBe(3);
+  await expect(joinDialog(page).getByRole("status")).toHaveCount(0);
+  await joinState(page, null);
+  expect(state.selections.map((command) => command.ideaId)).toEqual(["card-a", "card-b", "card-b"]);
+  expect(new Set(state.selections.map((command) => command.requestId)).size).toBe(3);
+  expect(state.maxActive).toBe(1);
+  expect(state.gets).toBe(initialGets);
+  expect(state.unexpected).toEqual([]);
+  await expect(page.getByTestId("reloads")).toHaveText("0");
+});
+
+test("pending join survives closing and reopening the selection dialog", async ({ page }) => {
+  const state = await mockWorkshop(page, { records: selectionRecords({ join: true }) });
+  await openJoin(page);
+  const initialGets = state.gets;
+  await join(page, "A");
+  await joinState(page, "A");
+  await joinDialog(page).getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(joinDialog(page)).not.toBeVisible();
+  await page.getByRole("button", { name: /^선정 프로젝트 참가하기/ }).click();
+  await joinState(page, "A");
+  expect(state.selectionsCompleted).toBe(0);
+  await expect(joinDialog(page).getByRole("status")).toHaveText("참가 선택 저장 중…");
+  await expect.poll(() => state.selectionsCompleted, { timeout: 5000 }).toBe(1);
+  await expect(page.getByTestId("saved-join")).toContainText('"jun":{"ideaId":"card-a"');
+  await joinState(page, "A");
+  await joinDialog(page).screenshot({ path: "work/join-selection-preview.png" });
+  expect(state.gets).toBe(initialGets);
+  expect(state.unexpected).toEqual([]);
+  await expect(page.getByTestId("reloads")).toHaveText("0");
+});
+
+test("a capacity error rolls back queued joins and allows a new selection", async ({ page }) => {
+  const state = await mockWorkshop(page, { records: selectionRecords({ join: true, savedJoin: "card-a" }),
+    failAt: 1, failMessage: "다른 참가자가 먼저 선택해 정원이 찼어요." });
+  await openJoin(page);
+  const initialGets = state.gets;
+  await join(page, "B");
+  await join(page, "C");
+  await joinState(page, "C");
+  await expect(joinDialog(page).getByRole("alert")).toHaveText("다른 참가자가 먼저 선택해 정원이 찼어요.", { timeout: 5000 });
+  await joinState(page, "A");
+  expect(state.selections.map((command) => command.ideaId)).toEqual(["card-b"]);
+  await expect(joinDialog(page).getByRole("status")).toHaveCount(0);
+  await join(page, "C");
+  await joinState(page, "C");
+  await expect.poll(() => state.selectionsCompleted, { timeout: 5000 }).toBe(2);
+  await expect(page.getByTestId("saved-join")).toContainText('"jun":{"ideaId":"card-c"');
+  await expect(joinDialog(page).getByRole("alert")).toHaveCount(0);
+  expect(state.gets).toBe(initialGets);
+  expect(state.unexpected).toEqual([]);
+  await expect(page.getByTestId("reloads")).toHaveText("0");
+});
+
+test("team and solo submissions show immediately and survive reopening while saving", async ({ page }) => {
+  const state = await mockWorkshop(page, { records: selectionRecords() });
+  await page.addInitScript(() => { (window as Window & { voteFixture?: unknown }).voteFixture = { ownCard: true }; });
+  await page.goto("/");
+  await page.getByRole("button", { name: /^팀·개별 고르기/ }).click();
+  const path = page.getByRole("dialog", { name: "팀·개별 투표", exact: true });
+  const initialGets = state.gets;
+  await path.getByLabel("닉네임", { exact: true }).fill("준");
+  await path.getByRole("button", { name: /^팀으로 갈래요/ }).click();
+  await path.getByRole("button", { name: "제출", exact: true }).click();
+  await expect(path.locator(".path-count")).toContainText("1/2명 제출 · 나는 팀으로 제출함", { timeout: 700 });
+  await expect(path.locator(".path-result section").nth(0)).toContainText("준", { timeout: 700 });
+  await path.getByRole("button", { name: /^개별로 갈래요/ }).click();
+  await path.getByRole("button", { name: "다시 제출", exact: true }).click({ timeout: 5000 });
+  await expect(path.locator(".path-count")).toContainText("1/2명 제출 · 나는 개별로 제출함", { timeout: 700 });
+  await expect(path.locator(".path-result section").nth(0)).toContainText("팀으로 · 0명", { timeout: 700 });
+  await expect(path.locator(".path-result section").nth(1)).toContainText("개별로 · 1명", { timeout: 700 });
+  await expect(path.locator(".path-result section").nth(1)).toContainText("후보 A");
+  expect(state.selectionsCompleted).toBe(0);
+  await expect(path.getByRole("status")).toHaveText("선택 저장 중…");
+  await expect(path.getByRole("button", { name: "팀·개별 투표 종료", exact: true })).toBeDisabled();
+  await path.getByRole("button", { name: "닫기", exact: true }).click();
+  await page.getByRole("button", { name: /^팀·개별 고르기/ }).click();
+  await expect(path.getByRole("button", { name: /^개별로 갈래요/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(path.locator(".path-count")).toContainText("나는 개별로 제출함");
+  await expect.poll(() => state.selectionsCompleted, { timeout: 8000 }).toBe(2);
+  await expect(path.getByRole("status")).toHaveCount(0);
+  await expect(page.getByTestId("saved-path")).toContainText('"jun":{"nickname":"준","choice":"solo","ideaId":"card-a"}');
+  expect(state.selections.map((command) => command.choice)).toEqual(["team", "solo"]);
+  expect(state.maxActive).toBe(1);
+  expect(state.gets).toBe(initialGets);
+  expect(state.unexpected).toEqual([]);
+  await expect(page.getByTestId("reloads")).toHaveText("0");
 });

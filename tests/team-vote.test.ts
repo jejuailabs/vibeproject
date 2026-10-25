@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {previewWorkspace} from '../src/lib/preview';
 import {previewWorkshop} from '../src/lib/workshop/memory';
-import type {PreviewState, RecordOf} from '../src/lib/workshop/model';
+import type {PreviewState, RecordOf, WorkshopRecord} from '../src/lib/workshop/model';
 
 type State=PreviewState&{result?:unknown};
 const as=(s:State,uid:string):State=>({...s,workspace:{...s.workspace,me:s.workspace.members.find(m=>m.id===uid)!}});
@@ -12,6 +12,14 @@ const run=(s:State,uid:string,command:{type:string;[key:string]:unknown})=>previ
  ...command,
  ...(command.type.endsWith('TeamVote')&&command.type!=='openTeamVote'&&!command.voteId&&vote(s)?{voteId:vote(s).id}:{}),
 });
+function responseRecord<K extends 'teamVote'|'pathVote'|'joinBoard'>(s:State,kind:K,id:string):RecordOf<K>{
+ const result=s.result as {id:string;records:WorkshopRecord[]};
+ const saved=s.records.find(r=>r.kind===kind&&r.id===id) as RecordOf<K>;
+ assert.ok(saved);
+ assert.deepEqual(result.records,[saved]);
+ assert.deepEqual(JSON.parse(JSON.stringify(result)),result);
+ return saved;
+}
 
 test('the leader opens a vote on problem cards, members vote once each and may change it, then the leader closes it',async()=>{
  const w=previewWorkspace();
@@ -349,4 +357,96 @@ test('casting returns the committed room and only the caller ballot, including c
  assert.equal(cancelledBallot.revision,ballot.revision+1);
  assert.deepEqual(cancelledBallot.data.ideaIds,[]);
  assert.equal(cancelled.records.some(r=>r.id===otherBallot.id),false);
+});
+
+test('vote lifecycle actions return only their committed room without changing workspace data',async()=>{
+ const w=previewWorkspace();
+ const make=(id:string)=>({...structuredClone(w.ideas.find(i=>i.id==='i1')!),id,ownerId:'seo',projectId:'p-onboarding',scope:'project' as const});
+ w.ideas.push(make('patch-first'));
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ let main=vote(s).id;
+ assert.equal(responseRecord(s,'teamVote',main).data.state,'open');
+ assert.ok(s.records.some(r=>r.kind==='notification'&&r.ownerId==='seo'));
+ s.workspace.ideas.push(make('patch-second'));
+ const workspace=structuredClone(s.workspace);
+ s=await run(s,'jun',{type:'refreshTeamVote',projectId:'p-onboarding',voteId:main,ideaIds:['patch-second']});
+ assert.deepEqual(responseRecord(s,'teamVote',main).data.candidateIds,['patch-first','patch-second']);
+ s=await run(s,'jun',{type:'cancelTeamVote',projectId:'p-onboarding',voteId:main});
+ assert.equal(responseRecord(s,'teamVote',main).data.state,'cancelled');
+ s=await run(s,'jun',{type:'deleteTeamVote',projectId:'p-onboarding',voteId:main});
+ assert.equal(responseRecord(s,'teamVote',main).data.state,'deleted');
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding'});
+ main=vote(s).id;
+ vote(s).data.counts={'patch-first':1};vote(s).data.voters=1;
+ s=await run(s,'jun',{type:'closeTeamVote',projectId:'p-onboarding',voteId:main});
+ assert.equal(responseRecord(s,'teamVote',main).data.state,'closed');
+ s=await run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId:main});
+ const pathId='pathvote-'+main;
+ assert.equal(responseRecord(s,'pathVote',pathId).data.state,'open');
+ s=await run(s,'jun',{type:'closePathVote',projectId:'p-onboarding',pathId});
+ assert.equal(responseRecord(s,'pathVote',pathId).data.state,'closed');
+ s=await run(s,'jun',{type:'openJoinBoard',projectId:'p-onboarding',pathId,capacity:2});
+ const boardId='joinboard-'+pathId;
+ assert.equal(responseRecord(s,'joinBoard',boardId).data.state,'open');
+ assert.deepEqual(s.workspace,workspace);
+ // Closing a join board changes project/member data and must keep the full reload path.
+ s=await run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'patch-first'});
+ s=await run(s,'jun',{type:'closeJoinBoard',projectId:'p-onboarding',boardId});
+ assert.equal('records' in (s.result as object),false);
+ assert.equal(s.workspace.projects.length,workspace.projects.length+1);
+});
+
+test('path selection patches preserve other members and reject choices after the deadline',async()=>{
+ const w=previewWorkspace(),now=new Date().toISOString();
+ w.ideas.push({...structuredClone(w.ideas.find(i=>i.id==='i1')!),id:'path-own',ownerId:'jun',projectId:'p-onboarding',scope:'project'});
+ const room:RecordOf<'pathVote'>={id:'path-response',kind:'pathVote',scope:'project',projectId:'p-onboarding',ownerId:'jun',revision:1,createdAt:now,updatedAt:now,
+  data:{voteId:'vote-response',round:1,state:'open',openedAt:now,closedAt:null,endsAt:null,picks:{seo:{nickname:'서오',choice:'team'}}}};
+ let s:State={workspace:w,records:[room]};
+ s=await run(s,'jun',{type:'pickPath',projectId:'p-onboarding',pathId:room.id,nickname:'준',choice:'solo',ideaId:'path-own'});
+ let updated=responseRecord(s,'pathVote',room.id);
+ assert.deepEqual(updated.data.picks,{seo:{nickname:'서오',choice:'team'},jun:{nickname:'준',choice:'solo',ideaId:'path-own'}});
+ assert.equal(updated.revision,2);
+ s=await run(s,'jun',{type:'pickPath',projectId:'p-onboarding',pathId:room.id,nickname:'준',choice:'team'});
+ updated=responseRecord(s,'pathVote',room.id);
+ assert.deepEqual(updated.data.picks.jun,{nickname:'준',choice:'team'});
+ assert.deepEqual(updated.data.picks.seo,room.data.picks.seo);
+ assert.equal(updated.revision,3);
+ updated.data.endsAt=new Date(Date.now()-1000).toISOString();
+ const before=structuredClone(s);
+ await assert.rejects(run(s,'seo',{type:'pickPath',projectId:'p-onboarding',pathId:room.id,nickname:'변경',choice:'team'}),/시간이 끝났/);
+ assert.deepEqual(s,before);
+});
+
+test('join selection patches enforce the latest capacity and preserve choices when a competing pick fails',async()=>{
+ const w=previewWorkspace(),now=new Date().toISOString();
+ const board:RecordOf<'joinBoard'>={id:'join-response',kind:'joinBoard',scope:'project',projectId:'p-onboarding',ownerId:'jun',revision:1,createdAt:now,updatedAt:now,
+  data:{pathId:'path-response',voteId:'vote-response',round:1,state:'open',openedAt:now,closedAt:null,endsAt:null,capacity:1,
+   options:['join-a','join-b'].map(ideaId=>({ideaId,title:ideaId,problem:ideaId,ownerId:'jun'})),picks:{}}};
+ let s:State={workspace:w,records:[board]};
+ s=await run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId:board.id,ideaId:'join-a'});
+ assert.equal(responseRecord(s,'joinBoard',board.id).data.picks.jun.ideaId,'join-a');
+ // A second request resolved against the committed board cannot take the last occupied slot.
+ const full=structuredClone(s);
+ await assert.rejects(run(s,'seo',{type:'pickJoin',projectId:'p-onboarding',boardId:board.id,ideaId:'join-a'}),/정원/);
+ assert.deepEqual(s,full);
+ s=await run(s,'seo',{type:'pickJoin',projectId:'p-onboarding',boardId:board.id,ideaId:'join-b'});
+ let updated=responseRecord(s,'joinBoard',board.id);
+ assert.equal(updated.data.picks.jun.ideaId,'join-a');
+ assert.equal(updated.data.picks.seo.ideaId,'join-b');
+ const bothFull=structuredClone(s);
+ await assert.rejects(run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId:board.id,ideaId:'join-b'}),/정원/);
+ assert.deepEqual(s,bothFull);
+ // Cancellation succeeds even when the selected option is full, freeing it for the next request.
+ s=await run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId:board.id,ideaId:'join-a'});
+ updated=responseRecord(s,'joinBoard',board.id);
+ assert.equal(updated.data.picks.jun,undefined);
+ assert.equal(updated.data.picks.seo.ideaId,'join-b');
+ s=await run(s,'seo',{type:'pickJoin',projectId:'p-onboarding',boardId:board.id,ideaId:'join-a'});
+ updated=responseRecord(s,'joinBoard',board.id);
+ assert.deepEqual(Object.keys(updated.data.picks),['seo']);
+ assert.equal(updated.data.picks.seo.ideaId,'join-a');
+ assert.equal(updated.revision,5);
+ assert.deepEqual(s.workspace.projects,w.projects);
+ assert.deepEqual(s.workspace.members,w.members);
 });

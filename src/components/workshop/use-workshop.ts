@@ -14,6 +14,10 @@ import { useVoteQueue } from "./use-vote-queue";
 import { canRead } from "@/lib/workshop/core";
 import { baselineArchive } from "@/lib/workshop/export";
 import { basicCard, basicCoach, basicDraft, type CardInput, type CardReply, type CoachInput, type CoachReply, type DraftInput, type DraftReply } from "@/lib/coaching";
+// These commands return the changed records without changing workspace cards,
+// membership or projects. Events and notifications arrive on the next poll.
+const recordOnlyCommands = new Set(["castTeamVote", "openTeamVote", "refreshTeamVote", "cancelTeamVote", "deleteTeamVote",
+  "closeTeamVote", "openPathVote", "pickPath", "closePathVote", "openJoinBoard", "pickJoin"]);
 export function useWorkshop({
   data,
   setData,
@@ -38,6 +42,8 @@ export function useWorkshop({
     [invites, setInvites] = useState<Snapshot["invites"]>(),
     [ai, setAi] = useState<Snapshot["ai"]>({ enabled: false, model: "" }),
     [busy, setBusy] = useState(false),
+    [pendingAction, setPendingAction] = useState(""),
+    [actionError, setActionError] = useState(""),
     pending = useRef<{ key: string; id: string } | null>(null),
     localFiles = useRef(new Map<string, File>());
   const previewState = useRef({ workspace: data, records });
@@ -109,6 +115,8 @@ export function useWorkshop({
     if (startedFor !== currentIdentity.current) return false;
     setBusy(true);
     setError("");
+    setActionError("");
+    setPendingAction((command as { type?: string })?.type || "save");
     let denied: { denied?: boolean; message?: string } | null = null;
     try {
       if (preview) {
@@ -151,7 +159,7 @@ export function useWorkshop({
         if (!response.ok) throw new Error(value.error);
         if (pending.current === request) pending.current = null;
         denied = value;
-        if ((command as { type?: string })?.type === "castTeamVote" && Array.isArray(value.records)) {
+        if (recordOnlyCommands.has((command as { type?: string })?.type || "") && Array.isArray(value.records)) {
           for (const record of value.records as WorkshopRecord[]) {
             const prior = updates.current.get(record.id);
             if (!prior || record.revision >= prior.revision) updates.current.set(record.id, record);
@@ -165,6 +173,7 @@ export function useWorkshop({
       if (startedFor !== currentIdentity.current) return false;
       if (denied?.denied) {
         setError(denied.message || "요청을 처리하지 못했습니다.");
+        setActionError(denied.message || "요청을 처리하지 못했습니다.");
         return false;
       }
       setNotice(
@@ -174,10 +183,14 @@ export function useWorkshop({
       );
       return true;
     } catch (e) {
-      if (startedFor === currentIdentity.current) setError(e instanceof Error ? e.message : "입력 내용을 확인해주세요.");
+      if (startedFor === currentIdentity.current) {
+        const message = e instanceof Error ? e.message : "입력 내용을 확인해주세요.";
+        setError(message);
+        setActionError(message);
+      }
       return false;
     } finally {
-      if (startedFor === currentIdentity.current) setBusy(false);
+      if (startedFor === currentIdentity.current) { setBusy(false); setPendingAction(""); }
     }
   }
   // The coach only suggests text; nothing is saved until the writer saves the form.
@@ -378,7 +391,7 @@ export function useWorkshop({
     }
   }
   const voteQueue = useVoteQueue(run, identity);
-  useEffect(() => { setBusy(false); pending.current = null; }, [identity]);
+  useEffect(() => { setBusy(false); setPendingAction(""); setActionError(""); pending.current = null; }, [identity]);
   const visible =
     preview && data
       ? records.filter(
@@ -408,6 +421,8 @@ export function useWorkshop({
     invites,
     ai,
     busy,
+    pendingAction,
+    actionError,
     voteQueue,
     run,
     askCoach,

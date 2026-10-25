@@ -416,6 +416,7 @@
 .vote-name>small{display:block;font-size:12px}
 .vote-card h3,.vote-board-title,.vote-dash-head h2{overflow-wrap:anywhere}
 .vote-board-title>h3{margin:0}
+.vote-action-status{display:flex;align-items:center;gap:7px;font-size:13px;color:inherit;margin:10px 0}
 .vote-share{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;max-width:100%}
 .vote-share-fallback{flex-basis:100%;min-width:0;max-width:360px;padding:12px;border:1px solid #d9cde7;border-radius:10px;background:#fff;color:#3e3249;font-size:13px;font-weight:400}
 .vote-share-fallback label{display:block}
