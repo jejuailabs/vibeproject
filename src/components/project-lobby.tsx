@@ -4,6 +4,7 @@ import { ArrowRight, Check, Copy, KeyRound, Link2, Lock, Plus, Search, Settings2
 import type { JoinPolicy, Project, Workspace } from "@/lib/types";
 import type { RecordOf, WorkshopRecord } from "@/lib/workshop/model";
 import { projectIdsOf } from "@/lib/policy";
+import { projectOriginLabel } from "@/lib/workshop/project-info";
 
 const policyLabel: Record<JoinPolicy, string> = { open: "누구나 참여", password: "비밀번호", request: "리더 승인" };
 const policyHelp: Record<JoinPolicy, string> = {
@@ -144,6 +145,8 @@ export function ProjectLobby({ workspace: w, records, busy, preview, invite, run
                   {p.id === me.projectId && <span className="lobby-tag on">지금 작업 중</span>}
                 </header>
                 <h3>{p.name}</h3>
+                <small>담당 리더: {person(p.leaderId)?.name || "확인 필요"}</small>
+                {projectOriginLabel(p, records) !== "생성 경위 기록 없음" && <small>{projectOriginLabel(p, records)}</small>}
                 <p>{p.intro || p.problem || "소개가 아직 없어요."}</p>
                 <footer>
                   <small><Users size={13} /> {p.memberIds.length}명</small>

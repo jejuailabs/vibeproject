@@ -21,6 +21,7 @@ const tabs = [
 ] as const;
 export function WorkshopHub(p: Props & { requestedTab?: { id: string; revision: number; docKey?: DocKey; target?: string } }) {
   const [tab, setTab] = useState("activities");
+  const visibleTab = tab === "admin" && p.workspace.me.role === "participant" ? "activities" : tab;
   useEffect(() => {
     const t = new URLSearchParams(location.search).get("tab");
     if (t && tabs.some((v) => v[0] === t)) setTab(t);
@@ -58,7 +59,7 @@ export function WorkshopHub(p: Props & { requestedTab?: { id: string; revision: 
   }, [p.requestedTab, tab]);
   const notice = recordsOf(p, "settings")[0]?.data.notice;
   return (
-    <div className="workshop-hub" data-screen={tab}>
+    <div className="workshop-hub" data-screen={visibleTab}>
       {notice && <p className="wk-announcement">{notice}</p>}
       <nav className="wk-tabs" aria-label="워크숍 기능">
         {tabs
@@ -68,8 +69,8 @@ export function WorkshopHub(p: Props & { requestedTab?: { id: string; revision: 
           .map(([id, label, num]) => (
             <button
               key={id}
-              aria-current={tab === id ? "page" : undefined}
-              className={tab === id ? "active" : ""}
+              aria-current={visibleTab === id ? "page" : undefined}
+              className={visibleTab === id ? "active" : ""}
               onClick={() => {
                 setTab(id);
                 const u = new URL(location.href);
@@ -87,14 +88,14 @@ export function WorkshopHub(p: Props & { requestedTab?: { id: string; revision: 
           ))}
       </nav>
       <div className="wk-screen-content">
-      {tab === "activities" && <Activities {...p} />}
-      {tab === "votes" && <Votes {...p} />}
-      {tab === "studio" && <Studio {...p} requestedDocKey={p.requestedTab?.docKey} />}
-      {tab === "sources" && <Sources {...p} />}
-      {tab === "communication" && <Communication {...p} />}
-      {tab === "showcase" && <Showcase {...p} />}
-      {tab === "inbox" && <Inbox {...p} />}
-      {tab === "admin" && <Admin {...p} />}
+      {visibleTab === "activities" && <Activities {...p} />}
+      {visibleTab === "votes" && <Votes {...p} />}
+      {visibleTab === "studio" && <Studio {...p} requestedDocKey={p.requestedTab?.docKey} />}
+      {visibleTab === "sources" && <Sources {...p} />}
+      {visibleTab === "communication" && <Communication {...p} />}
+      {visibleTab === "showcase" && <Showcase {...p} />}
+      {visibleTab === "inbox" && <Inbox {...p} />}
+      {visibleTab === "admin" && <Admin {...p} />}
       </div>
     </div>
   );

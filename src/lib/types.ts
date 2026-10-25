@@ -17,7 +17,7 @@ export type Idea = {
 };
 export type FeedbackContext = {stage:'thought'|'questions'|'definition'|'ready'; revision:number};
 export type Comment = {context?:FeedbackContext; id: string; ideaId: string; authorId: string; body: string; createdAt: string };
-export type Project = { id: string; name: string; problem: string; leaderId: string; memberIds: string[]; sourceIdeaId: string; stage: string; createdAt: string; mode?: 'solo'|'team'; capacity?: number; intro?: string; joinPolicy?: JoinPolicy; confirmedProblem?: ConfirmedProblem };
+export type Project = { id: string; name: string; problem: string; leaderId: string; memberIds: string[]; sourceIdeaId: string; stage: string; createdAt: string; mode?: 'solo'|'team'; capacity?: number; intro?: string; joinPolicy?: JoinPolicy; confirmedProblem?: ConfirmedProblem; createdFromVote?: { projectId: string; projectName: string; voteId: string; boardId: string; endedBy: 'time'|'manual' } };
 // Snapshot of the team member's problem definition the leader confirmed as the project's problem.
 export type ConfirmedProblem = { ideaId: string; ownerId: string; revision: number; draft: number; statement: string; reason: string; confirmedBy: string; confirmedAt: string };
 export type Message = { id: string; authorId: string; body: string; channel: string; createdAt: string; step?: StepKey; replyToId?: string; mentions?: string[]; revision?: number; pinned?: boolean; editedAt?: string };

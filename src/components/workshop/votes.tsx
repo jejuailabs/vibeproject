@@ -303,7 +303,7 @@ export function Votes(p: Props) {
                         label: "새 팀장",
                         type: "select",
                         options: team.memberIds
-                          .filter((id) => id !== w.me.id)
+                          .filter((id) => id !== team.leaderId && w.members.some((m) => m.id === id && m.active))
                           .map((id) => ({
                             value: id,
                             label:

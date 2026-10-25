@@ -425,7 +425,7 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
         if (!joined.length) continue;
         const leaderId = joined.includes(o.ownerId) ? o.ownerId : joined[0];
         const id = "p-" + c.requestId + "-" + ++n;
-        saveProject(c, { id, name: o.title.slice(0, 60), problem: o.problem, intro: o.problem, leaderId, memberIds: joined, sourceIdeaId: o.ideaId, stage: "팀 구성", createdAt: c.now, mode: "team", capacity: jb.data.capacity, joinPolicy: "request" });
+        saveProject(c, { id, name: o.title.slice(0, 60), problem: o.problem, intro: o.problem, leaderId, memberIds: joined, sourceIdeaId: o.ideaId, stage: "팀 구성", createdAt: c.now, mode: "team", capacity: jb.data.capacity, joinPolicy: "request", createdFromVote: { projectId: p.id, projectName: p.name, voteId: jb.data.voteId, boardId: jb.id, endedBy: timeUp ? "time" : "manual" } });
         write(c, "project-" + id, "project", { mode: "team", capacity: jb.data.capacity, stage: "forming", baselineId: null, repositoryUrl: "", deployUrl: "", firebaseUrl: "", inviteCode: randomHex(16) }, "project", id);
         for (const uid of joined) {
           addMembership(c, await member(c, uid), id);
