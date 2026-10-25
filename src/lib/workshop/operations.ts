@@ -1,7 +1,7 @@
 import {emptyRefinement} from '../refinement';
-import type { Context, RecordOf, Scope } from "./model";
+import type { Context, RecordOf, Scope, WorkshopRecord } from "./model";
 import type { WorkshopCommand } from "./commands";
-import type { Member, Message, Idea } from "../types";
+import type { Member, Message, Idea, Project } from "../types";
 import {
   admin,
   operator,
@@ -76,6 +76,28 @@ export async function operations(
   cmd: WorkshopCommand,
 ): Promise<{ id: string } | null> {
   switch (cmd.type) {
+    case "deleteProject": {
+      admin(c);
+      const p = await c.store.read<Project>(path(c, "projects/" + cmd.projectId));
+      if (!p) fail("프로젝트를 찾을 수 없습니다.", 404);
+      if (cmd.confirmName !== p.name) fail("삭제할 프로젝트 이름을 정확히 입력해주세요.", 400);
+      const members = await c.store.list<Member>(path(c, "members"));
+      const records = await c.store.list<WorkshopRecord>(path(c, "workshop"), [{ field: "projectId", value: p.id }]);
+      // Remove the live room; retain its contents and deletion record for recovery.
+      // Membership cleanup and directory removal commit in the same transaction.
+      c.store.write(path(c, "deletedProjects/" + p.id), { project: p, deletedAt: c.now, deletedBy: c.uid, reason: cmd.reason });
+      for (const m of members) {
+        if (!projectIdsOf(m).includes(p.id) && m.projectId !== p.id) continue;
+        leaveMembership(c, m, p.id);
+        c.store.write(path(c, "projects/" + p.id + "/members/" + m.id), { status: "deleted", leftAt: c.now }, true);
+      }
+      for (const r of records) if (r.kind === "support") c.store.remove(path(c, "workshop/" + r.id));
+      c.store.remove(path(c, "projectSecrets/" + p.id));
+      c.store.remove(path(c, "projectDirectory/" + p.id));
+      c.store.remove(path(c, "projects/" + p.id));
+      event(c, "프로젝트 삭제", p.name + " · " + cmd.reason, p.id);
+      return { id: p.id };
+    }
     case "settings": {
       admin(c);
       const { type, ...data } = cmd;

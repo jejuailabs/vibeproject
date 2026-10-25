@@ -829,7 +829,7 @@ export function ProjectSteps(p: StepsProps) {
                       <footer>
                         {live && !ended ? (amSolo ? (here ? <em>내 프로젝트</em> : null)
                           : <button type="button" className={here ? "primary-button" : "secondary-button"} aria-pressed={here} disabled={(p.busy && !voteQueue.saving) || (!here && full)} onClick={() => voteQueue.pickJoin({ type: "pickJoin", projectId: team.id, boardId: boardView.id, ideaId: o.ideaId }, d.picks[me.id] || null)}>{here ? <><Check size={14} /> 참가함 · 취소</> : full ? "정원 마감" : "참가"}</button>)
-                          : d.state === "closed" ? (made ? <em>{here ? "내 프로젝트 · 프로젝트 목록에서 열 수 있어요" : "프로젝트 만들어짐"}</em> : <em className="none">참가자 없음</em>) : null}
+                          : d.state === "closed" ? (made ? (w.projects.some((p) => p.id === made) ? <em>{here ? "내 프로젝트 · 프로젝트 목록에서 열 수 있어요" : "프로젝트 만들어짐"}</em> : <em className="none">삭제된 프로젝트</em>) : <em className="none">참가자 없음</em>) : null}
                       </footer>
                     </article>
                   );

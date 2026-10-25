@@ -21,6 +21,7 @@ export async function applyWorkshop(c: Context, raw: unknown) {
       "resolveReport",
       "revokeInvite",
       "memberRole",
+      "deleteProject",
     ].includes(command.type)
   )
     fail("종료된 기수는 읽기 전용입니다.");

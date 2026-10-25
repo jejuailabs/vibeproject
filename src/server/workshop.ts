@@ -176,6 +176,7 @@ export async function getSnapshot(
     for (const d of snap.docs) {
       const r = { ...d.data(), id: d.id } as WorkshopRecord;
       const allowed =
+        (!r.projectId || projects.some((p) => p.id === r.projectId)) &&
         canRead(c, r) &&
         (r.kind !== "join" ||
           r.ownerId === uid ||

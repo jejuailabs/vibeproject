@@ -396,6 +396,7 @@ export function useWorkshop({
     preview && data
       ? records.filter(
           (r) =>
+            (!r.projectId || data.projects.some((p) => p.id === r.projectId)) &&
             canRead(
               {
                 uid: data.me.id,

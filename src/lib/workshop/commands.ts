@@ -174,6 +174,7 @@ export const workshopCommand = z.discriminatedUnion("type", [
     resetInvite: z.boolean(),
   }),
   S({ type: z.literal("leaveProject"), ...project, reason }),
+  S({ type: z.literal("deleteProject"), ...project, confirmName: title, reason }),
   S({ type: z.literal("transferLeader"), ...project, memberId: id, reason }),
   S({
     type: z.literal("projectConfig"),
