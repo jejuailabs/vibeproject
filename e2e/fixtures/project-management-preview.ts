@@ -7,6 +7,10 @@ export function previewWorkspace() {
   const workspace = baseWorkspace();
   workspace.members.push({ id: "fac", name: "테스트 진행자", avatar: "", role: "facilitator", projectId: null, active: true });
   const first = workspace.projects[0];
+  if (new URLSearchParams(window.location.search).has("mobile")) {
+    const ready = workspace.ideas.find((idea) => idea.refinement?.ready)!;
+    for (const [index, ownerId] of ["jun", "seo"].entries()) workspace.ideas.push({ ...structuredClone(ready), id: "mobile-card-" + index, title: "모바일에서도 읽고 투표할 수 있는 문제 카드 " + (index + 1), ownerId, projectId: first.id, scope: "project", state: "shared" });
+  }
   workspace.projects.push({
     ...first,
     id: "p-voted",

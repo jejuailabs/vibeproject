@@ -29,10 +29,10 @@ const result = await build({
 });
 const script = result.outputFiles.find((file) => file.path.endsWith(".js")).text;
 const styles = (await Promise.all([
-  "globals.css", "arena.css", "workshop.css", "court.css", "journey.css", "lobby.css", "steps.css", "project-flow.css",
+  "globals.css", "arena.css", "workshop.css", "court.css", "journey.css", "lobby.css", "steps.css", "project-flow.css", "mobile.css",
 ].map((file) => readFile(path.join(root, "src/app", file), "utf8")))).join("\n")
   .replace(/@import url\([^;]+;/g, "");
-const html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><link rel="stylesheet" href="/fixture.css"></head><body><div id="root"></div><script src="/fixture.js"></script></body></html>';
+const html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><link rel="stylesheet" href="/fixture.css"></head><body><div id="root"></div><script src="/fixture.js"></script></body></html>';
 const server = createServer((request, response) => {
   const route = request.url?.split("?")[0];
   const resource = route === "/" ? ["text/html; charset=utf-8", html]

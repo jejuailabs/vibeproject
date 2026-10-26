@@ -66,7 +66,7 @@ function ActionFeedback(p: { pendingAction?: string; actionError?: string }) {
 }
 
 function Avatar({ member }: { member?: Member }) {
-  return <img className="steps-avatar" src={characterFor(member).image} alt="" />;
+  return <img className="steps-avatar" src={characterFor(member).thumbnail} alt="" loading="lazy" decoding="async" />;
 }
 // A card shows on a step's board only once the step before it is finished; otherwise it waits below the board.
 function reached(step: StepKey, i: Idea) {
@@ -961,7 +961,7 @@ export function MyProjects({ projects, me, members, records = [], busy, run, onO
             <span className="pj-open-owner">담당 리더: {members.find((m) => m.id === p.leaderId)?.name || "확인 필요"}</span>
             {projectOriginLabel(p, records) !== "생성 경위 기록 없음" && <span className="pj-open-origin">{projectOriginLabel(p, records)}</span>}
             <small>{p.confirmedProblem?.statement || p.intro || p.problem || "함께 풀 문제를 찾는 중"}</small>
-            <span className="pj-open-avatars">{p.memberIds.slice(0, 6).map((id) => <img key={id} className="steps-avatar" src={characterFor(members.find((m) => m.id === id)).image} alt="" />)}</span>
+            <span className="pj-open-avatars">{p.memberIds.slice(0, 6).map((id) => <img key={id} className="steps-avatar" src={characterFor(members.find((m) => m.id === id)).thumbnail} alt="" loading="lazy" decoding="async" />)}</span>
             <span className="pj-open-go">{admin && (!mine.includes(p.id) || !p.memberIds.includes(me.id)) ? "관리 정보" : "들어가기"} <ArrowRight size={16} /></span>
           </button>
           </article>

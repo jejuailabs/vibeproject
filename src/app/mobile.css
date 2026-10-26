@@ -1,0 +1,74 @@
+.mobile-nav-backdrop,.mobile-nav-close{display:none}
+
+@media(max-width:750px){
+  .arena-shell,.arena-shell.with-chat{display:block;margin:0;border:0;border-radius:0;min-height:100dvh;overflow:clip}
+  .arena-shell .main-shell{min-height:100dvh}
+  .arena-shell .main-content{padding:12px 12px calc(24px + env(safe-area-inset-bottom));width:100%;min-width:0}
+  .arena-shell .topbar{height:auto;min-height:64px;display:flex;flex-wrap:wrap;gap:6px;padding:8px max(12px,env(safe-area-inset-right)) 8px max(12px,env(safe-area-inset-left))}
+  .arena-shell .topbar>.mobile-menu{order:0}
+  .arena-shell .top-actions{order:1;margin-left:auto}
+  .arena-shell .top-actions>button{display:inline-flex}
+  .arena-shell .space-tabs{order:2;flex:0 0 100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;margin:0;gap:4px}
+  .arena-shell .space-tabs button{padding:10px 4px;font-size:13px;min-height:44px}
+  .arena-shell .icon-button,.arena-shell .project-delete-button{min-width:44px;min-height:44px}
+  .arena-shell .primary-button,.arena-shell .secondary-button,.arena-shell .text-button,.arena-shell .quiet-button{min-height:44px;font-size:14px;white-space:normal;justify-content:center}
+  .arena-shell :is(input,select,textarea){font-size:16px;max-width:100%;min-width:0}
+  .arena-shell :is(.modal,.pad-composer,.wk-box,.pj,.lobby) :is(input,select,textarea){font-size:16px}
+  .arena-shell :is(input:not([type=checkbox]):not([type=radio]),select){min-height:44px}
+  .arena-shell .preview-banner{padding:8px 12px;font-size:11px;gap:8px}
+  .arena-shell .preview-banner>span{line-height:1.5}
+  .arena-shell .mobile-nav-backdrop{display:block;position:fixed;inset:0;background:#140d22a6;z-index:39;touch-action:none}
+  .arena-shell .sidebar.mobile-open{width:min(300px,calc(100vw - 48px));height:var(--mobile-viewport-height,100dvh);min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:64px 12px max(16px,env(safe-area-inset-bottom));z-index:40}
+  .arena-shell .sidebar.mobile-open>.brand{display:none}
+  .arena-shell .sidebar .mobile-nav-close{display:flex;position:sticky;top:12px;z-index:2;align-self:flex-end;flex-shrink:0;margin-top:-52px;margin-bottom:8px;background:#4b365f}
+  .arena-shell .sidebar nav{flex-shrink:0}
+  .arena-shell .sidebar.mobile-open .nav-item{min-height:48px;margin-bottom:6px;padding:12px 16px;font-size:14px}
+  .arena-shell .sidebar.mobile-open .nav-text{font-size:14px}
+  .arena-shell .sidebar-bottom{flex-shrink:0;margin-top:16px}
+  .arena-shell .chat-panel{inset:0;width:100%;height:var(--mobile-viewport-height,100dvh);min-height:0;border-radius:0;padding:12px 12px max(12px,env(safe-area-inset-bottom));z-index:45;overflow:hidden;overscroll-behavior:contain}
+  .arena-shell .chat-heading,.arena-shell .channel-tabs,.arena-shell .chat-compose{flex-shrink:0}
+  .arena-shell .chat-heading h2{font-size:22px}.arena-shell .chat-heading .mini-label{display:none}
+  .arena-shell .chat-intro{display:none}
+  .arena-shell .chat-messages{min-height:0;flex:1;overflow:auto;overscroll-behavior:contain}
+  .arena-shell .channel-tabs button{min-height:44px;font-size:14px}
+  .arena-shell .chat-compose textarea{font-size:16px;min-height:64px;max-height:120px}
+  .arena-shell .chat-compose .send-button{width:44px;height:44px}
+  .arena-shell .page-heading{flex-wrap:wrap;gap:12px}
+  .arena-shell .page-heading h1{font-size:22px}
+  .arena-shell .arena-profile.compact{display:none}
+  .arena-shell .wk-tabs{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px;max-width:100%;padding:8px 0;scrollbar-width:thin}
+  .arena-shell .wk-tabs button{flex-shrink:0;min-height:48px;min-width:94px;font-size:13px;padding:10px 12px}
+  .arena-shell .wk-box{padding:16px 12px}
+  .arena-shell .wk-note{padding:16px 12px}
+  .arena-shell .wk-action>summary{min-height:44px;font-size:14px}
+  .pj-list,.pj-steps,.vote-list,.join-grid,.pad-waiting ul{grid-template-columns:minmax(0,1fr)}
+  .pj-head{padding:18px 16px}.pj-head h2{font-size:23px}
+  .pj-open{padding:20px 16px;gap:10px}.pj-open strong{font-size:20px;overflow-wrap:anywhere}
+  .pj-open-tag{margin-right:36px}.pj-open-go{min-height:44px;padding:10px 14px}
+  .pj-bar{flex-wrap:wrap;padding:8px;gap:8px}.pj-tabs{width:100%;flex-basis:100%;padding-bottom:4px;overflow-x:auto}
+  .pj-tabs button{min-height:44px;padding:10px 12px;font-size:13px;flex-shrink:0}
+  .pj .pj-step-head h2{font-size:23px}.pj-step-head p{line-height:1.6}
+  .pj-step{min-height:112px}.pj-step strong{font-size:18px}
+  .pad-board{columns:1}.pad-composer .write-grid{grid-template-columns:minmax(0,1fr)}.pad-composer .write-aside{position:static}
+  .path-start{display:flex;flex-wrap:wrap;width:100%}.path-start label{flex-wrap:wrap;font-size:14px}
+  .vote-card-actions{gap:10px}.vote-card-actions>button,.vote-card-actions>.vote-share{flex:1 1 120px}
+  .vote-share>button{width:100%}
+  .vote-tile{min-width:0;padding:18px 14px}.vote-tile header strong{white-space:normal;overflow-wrap:anywhere}
+  .tile-action{min-height:44px}
+  .arena-shell :is(.modal,.pad-composer,.vote-dash,.card-text-dialog){width:calc(100vw - 16px);max-width:calc(100vw - 16px);max-height:calc(var(--mobile-viewport-height,100dvh) - 16px);margin:auto;padding:16px;overflow-y:auto;overscroll-behavior:contain;border-radius:14px}
+  .arena-shell .pad-composer{padding:0}
+  .pad-composer>header{padding:12px;flex-wrap:wrap}.pad-composer>header select{max-width:100%;flex:1 1 100%}.pad-composer>:not(header){margin:16px 12px}
+  :is(.vote-picker,.vote-detail,.path-vote) .vote-detail-head,.vote-dash .vote-dash-head{position:sticky;top:-16px;z-index:3;background:#fff;padding:10px 0;margin-top:-6px}
+  .vote-dash-head>div,.vote-detail-head>div{min-width:0}.vote-dash-head h2{font-size:21px}
+  .vote-detail-actions{display:flex;flex-direction:column;align-items:stretch;gap:12px}
+  .vote-picker .vote-detail-actions label{margin:0;width:100%;font-size:14px;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .vote-picker .vote-detail-actions select{flex:1;min-width:120px}
+  .vote-picker-list{max-height:none;overflow:visible}.vote-picker-list label{font-size:14px;min-height:44px}
+  .vote-detail-actions>button,.vote-dash-foot>button{width:100%;white-space:normal;min-height:44px}
+  .vote-dash-clock strong{font-size:clamp(28px,10vw,42px);letter-spacing:0}
+  .vote-dash-top{gap:8px}.vote-dash-stat,.vote-dash-clock{padding:12px 8px}
+  .vote-dash-bar p{gap:6px;flex-wrap:wrap}.vote-dash-bar p strong{white-space:normal;flex-basis:100%}
+  .join-card{padding:14px 12px}.join-creation-notice{font-size:14px}
+  .lobby-join .lobby-row h3,.lobby-card h3{font-size:18px;overflow-wrap:anywhere}
+  .lobby-heading p,.lobby-row p,.lobby-card p{font-size:14px}
+}
