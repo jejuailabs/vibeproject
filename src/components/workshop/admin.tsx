@@ -119,7 +119,7 @@ export function Admin(p: Props) {
               const leader = w.members.find((m) => m.id === project.leaderId);
               const candidates = w.members.filter((m) => m.active && m.id !== project.leaderId && project.memberIds.includes(m.id));
               return (
-                <article className="wk-note project-list-card" key={project.id} aria-label={project.name + " 관리 정보"}>
+                <article className="wk-note project-list-card" id={"project-management-" + project.id} key={project.id} aria-label={project.name + " 관리 정보"}>
                   {admin && <ProjectDeleteButton project={project} run={p.run} busy={p.busy} />}
                   <Badge>{project.stage}</Badge>
                   <h3>{project.name}</h3>

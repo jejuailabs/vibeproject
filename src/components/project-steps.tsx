@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronDown, Crown, Download, LoaderCircle, MessageCircle, Pencil, Plus, Sparkles, Trash2, Users, Vote, X } from "lucide-react";
 import { IdeaRefinement } from "./idea-refinement";
 import { characterFor } from "@/lib/characters";
-import { canReadIdea } from "@/lib/policy";
+import { canReadIdea, projectIdsOf } from "@/lib/policy";
 import { answered, definitionFields, questionFields, statement } from "@/lib/refinement";
 import { docKeys, docNames, type DocKey } from "@/lib/workshop/model";
 import { teamVoteTitle } from "@/lib/workshop/vote-title";
@@ -945,23 +945,24 @@ function Tile({ n, label, hint, button, onClick }: { n: number; label: string; h
   );
 }
 
-/** What a member sees first: only the projects they belong to, one button each. */
+/** Members see their rooms; administrators see every room in the same list. */
 export function MyProjects({ projects, me, members, records = [], busy, run, onOpen, onLobby }: { projects: Project[]; me: Member; members: Member[]; records?: WorkshopRecord[]; busy: boolean; run: Props["run"]; onOpen: (p: Project) => void; onLobby: () => void }) {
+  const admin = me.role === "admin", mine = projectIdsOf(me);
   return (
-    <section className="pj my-projects" aria-label="내 프로젝트">
-      <header className="pj-head"><h2>내 프로젝트</h2><p>내가 참가한 프로젝트입니다. 담당 리더가 참여 승인과 팀 구성을 관리합니다.</p><p>다른 참가자는 ‘다른 프로젝트 만들기·참여하기’에서 팀 프로젝트를 찾고, 기수 운영자는 ‘프로젝트 관리’에서 전체 목록을 확인합니다.</p></header>
+    <section className="pj my-projects" aria-label={admin ? "전체 프로젝트" : "내 프로젝트"}>
+      <header className="pj-head"><h2>{admin ? "전체 프로젝트" : "내 프로젝트"}</h2>{admin ? <p>관리자에게는 참가 여부와 관계없이 모든 프로젝트가 표시됩니다. 카드 오른쪽 위 휴지통으로 삭제할 수 있습니다.</p> : <><p>내가 참가한 프로젝트입니다. 담당 리더가 참여 승인과 팀 구성을 관리합니다.</p><p>다른 프로젝트는 ‘다른 프로젝트 만들기·참여하기’에서 찾아볼 수 있습니다.</p></>}</header>
       <div className="pj-list">
         {projects.map((p) => (
           <article key={p.id} className="pj-project-card project-list-card">
           {me.role === "admin" && <ProjectDeleteButton project={p} run={run} busy={busy} />}
           <button className="pj-open" disabled={busy} onClick={() => onOpen(p)}>
-            <span className="pj-open-tag">{p.leaderId === me.id ? "리더" : "팀원"} · {p.memberIds.length}명</span>
+            <span className="pj-open-tag">{!mine.includes(p.id) || !p.memberIds.includes(me.id) ? "관리자 조회" : p.leaderId === me.id ? "리더" : "팀원"} · {p.memberIds.length}명</span>
             <strong>{p.name}</strong>
             <span className="pj-open-owner">담당 리더: {members.find((m) => m.id === p.leaderId)?.name || "확인 필요"}</span>
             {projectOriginLabel(p, records) !== "생성 경위 기록 없음" && <span className="pj-open-origin">{projectOriginLabel(p, records)}</span>}
             <small>{p.confirmedProblem?.statement || p.intro || p.problem || "함께 풀 문제를 찾는 중"}</small>
             <span className="pj-open-avatars">{p.memberIds.slice(0, 6).map((id) => <img key={id} className="steps-avatar" src={characterFor(members.find((m) => m.id === id)).image} alt="" />)}</span>
-            <span className="pj-open-go">들어가기 <ArrowRight size={16} /></span>
+            <span className="pj-open-go">{admin && (!mine.includes(p.id) || !p.memberIds.includes(me.id)) ? "관리 정보" : "들어가기"} <ArrowRight size={16} /></span>
           </button>
           </article>
         ))}

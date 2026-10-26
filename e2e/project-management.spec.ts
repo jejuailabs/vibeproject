@@ -122,18 +122,50 @@ test("cancelling deletion keeps the project", async ({ page }) => {
   await expect(room).toBeVisible();
 });
 
-test("admin can use the trash icon on their ordinary dashboard project card", async ({ page }) => {
+test("admin dashboard lists and deletes generated projects outside their membership", async ({ page }) => {
   await page.goto("/?adminMember=1");
   await page.getByRole("button", { name: "채팅 닫기", exact: true }).click();
   await page.getByRole("button", { name: "프로젝트 공간", exact: true }).click();
-  const mine = page.getByRole("region", { name: "내 프로젝트", exact: true });
-  const remove = mine.getByRole("button", { name: "첫걸음 프로젝트 삭제", exact: true });
+  const mine = page.getByRole("region", { name: "전체 프로젝트", exact: true });
+  await expect(mine.locator(".pj-open")).toHaveCount(3);
+  await expect(mine.locator(".pj-project-card").filter({ hasText: "투표에서 만들어진 프로젝트" })).toContainText("관리자 조회 · 1명");
+  await expect(mine).toContainText("개인 진행 프로젝트");
+  const remove = mine.getByRole("button", { name: "투표에서 만들어진 프로젝트 프로젝트 삭제", exact: true });
   await expect(remove).toBeVisible();
   await mine.screenshot({ path: "work/my-projects-admin-trash.png" });
-  page.once("dialog", (dialog) => dialog.dismiss());
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mine.screenshot({ path: "work/all-projects-admin-mobile.png" });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  page.once("dialog", (dialog) => dialog.accept());
   await remove.click();
-  await expect(mine).toBeVisible();
+  await expect(mine.locator(".pj-open")).toHaveCount(2);
+  await expect(mine).not.toContainText("투표에서 만들어진 프로젝트");
+  await expect(mine).toContainText("첫걸음");
   await expect(page.getByRole("region", { name: "프로젝트 단계", exact: true })).toHaveCount(0);
+});
+
+test("admin without any membership still sees all dashboard projects and opens only management information", async ({ page }) => {
+  await page.getByRole("button", { name: "프로젝트 공간", exact: true }).click();
+  const all = page.getByRole("region", { name: "전체 프로젝트", exact: true });
+  await expect(all.locator(".pj-open")).toHaveCount(3);
+  await expect(all.locator(".project-delete-button")).toHaveCount(3);
+  await all.getByRole("button").filter({ hasText: "투표에서 만들어진 프로젝트" }).click();
+  await expect(page.getByRole("article", { name: "투표에서 만들어진 프로젝트 관리 정보", exact: true })).toBeVisible();
+  await page.getByRole("navigation").getByRole("button", { name: "대시보드", exact: true }).click();
+  await expect(all.locator(".pj-open")).toHaveCount(3);
+  await expect(all.locator(".pj-project-card").filter({ hasText: "투표에서 만들어진 프로젝트" })).toContainText("관리자 조회 · 1명");
+});
+
+test("admin dashboard returns from an entered room to the complete project list", async ({ page }) => {
+  await page.goto("/?adminMember=1");
+  await page.getByRole("button", { name: "채팅 닫기", exact: true }).click();
+  await page.getByRole("button", { name: "프로젝트 공간", exact: true }).click();
+  const all = page.getByRole("region", { name: "전체 프로젝트", exact: true });
+  await all.getByRole("button").filter({ hasText: "첫걸음" }).click();
+  await expect(page.getByRole("region", { name: "프로젝트 단계", exact: true })).toBeVisible();
+  await page.getByRole("navigation").getByRole("button", { name: "대시보드", exact: true }).click();
+  await expect(all.locator(".pj-open")).toHaveCount(3);
 });
 
 test("admin can delete directly from the ordinary project participation list", async ({ page }) => {
@@ -149,7 +181,7 @@ test("administrator's project home opens the complete management screen", async 
   await page.goto("/?adminMember=1");
   await page.getByRole("button", { name: "채팅 닫기", exact: true }).click();
   await page.getByRole("button", { name: "프로젝트 공간", exact: true }).click();
-  await page.getByRole("region", { name: "내 프로젝트", exact: true }).getByRole("button").filter({ hasText: "첫걸음" }).click();
+  await page.getByRole("region", { name: "전체 프로젝트", exact: true }).getByRole("button").filter({ hasText: "첫걸음" }).click();
   await page.getByRole("region", { name: "프로젝트 단계", exact: true }).getByRole("button", { name: "프로젝트 관리", exact: true }).click();
   const management = page.getByRole("region", { name: "전체 프로젝트 관리", exact: true });
   await expect(management).toBeVisible();
