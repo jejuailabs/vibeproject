@@ -37,6 +37,7 @@ const nickname = z
   );
 export const photoId = z.string().regex(/^photo-[a-f0-9-]{36}$/);
 const joinPolicy = z.enum(["open", "password", "request"]);
+const voteMinutes = z.number().int().min(1).max(72 * 60).optional();
 const S = <T extends z.ZodRawShape>(fields: T) => z.object(fields).strict();
 export const workshopCommand = z.discriminatedUnion("type", [
   S({
@@ -154,16 +155,16 @@ export const workshopCommand = z.discriminatedUnion("type", [
     revision,
     reason,
   }),
-  S({ type: z.literal("openTeamVote"), ...project, title: z.string().trim().max(80).optional(), maxVotes: z.number().int().min(1).max(10).optional(), candidateIds: z.array(id).min(1).max(100).optional(), minutes: z.number().int().min(1).max(180).optional() }),
+  S({ type: z.literal("openTeamVote"), ...project, title: z.string().trim().max(80).optional(), maxVotes: z.number().int().min(1).max(10).optional(), candidateIds: z.array(id).min(1).max(100).optional(), minutes: voteMinutes }),
   S({ type: z.literal("castTeamVote"), ...project, voteId: id.optional(), ideaId: id }),
   S({ type: z.literal("closeTeamVote"), ...project, voteId: id.optional() }),
   S({ type: z.literal("refreshTeamVote"), ...project, voteId: id.optional(), ideaIds: z.array(id).min(1).max(100).optional() }),
   S({ type: z.literal("cancelTeamVote"), ...project, voteId: id.optional() }),
   S({ type: z.literal("deleteTeamVote"), ...project, voteId: id.optional() }),
-  S({ type: z.literal("openPathVote"), ...project, voteId: id, minutes: z.number().int().min(1).max(180).optional() }),
+  S({ type: z.literal("openPathVote"), ...project, voteId: id, minutes: voteMinutes }),
   S({ type: z.literal("pickPath"), ...project, pathId: id, nickname: z.string().trim().min(1).max(20), choice: z.enum(["team", "solo"]), ideaId: id.optional() }),
   S({ type: z.literal("closePathVote"), ...project, pathId: id }),
-  S({ type: z.literal("openJoinBoard"), ...project, pathId: id, capacity: z.number().int().min(1).max(100), minutes: z.number().int().min(1).max(180).optional() }),
+  S({ type: z.literal("openJoinBoard"), ...project, pathId: id, capacity: z.number().int().min(1).max(100), minutes: voteMinutes }),
   S({ type: z.literal("pickJoin"), ...project, boardId: id, ideaId: id }),
   S({ type: z.literal("closeJoinBoard"), ...project, boardId: id }),
   S({

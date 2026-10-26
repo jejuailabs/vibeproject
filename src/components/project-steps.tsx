@@ -72,8 +72,9 @@ function Avatar({ member }: { member?: Member }) {
 function reached(step: StepKey, i: Idea) {
   return step === "definition" ? answered(i.refinement) === questionFields.length : true;
 }
-const voteTimes = [0, 3, 5, 10, 15, 20, 30, 60];
-const clock = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)); return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
+const voteTimes = [0, 3, 5, 10, 15, 20, 30, 60, 360, 720, 1440, 2880, 4320];
+const voteTimeLabel = (minutes: number) => !minutes ? "제한 없음" : minutes >= 60 ? minutes / 60 + "시간" : minutes + "분";
+const clock = (ms: number) => { const s = Math.max(0, Math.ceil(ms / 1000)), hours = Math.floor(s / 3600); return (hours ? String(hours).padStart(2, "0") + ":" : "") + String(Math.floor(s / 60) % 60).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0"); };
 function cardDone(step: StepKey, i: Idea) {
   return step === "thought" ? true : step === "questions" ? answered(i.refinement) === questionFields.length : !!i.refinement?.ready;
 }
@@ -517,14 +518,14 @@ export function ProjectSteps(p: StepsProps) {
                       {jb ? <button type="button" className="primary-button" onClick={() => setBoardId(jb.id)}><Crown size={14} /> {jb.data.state === "open" && !timeUp(jb) ? "선정 프로젝트 참가하기" + (jb.data.endsAt ? " · " + clock(Date.parse(jb.data.endsAt) - now) : "") : "프로젝트 배정 결과"}</button>
                         : pv.data.state === "closed" && leader && !ended && <span className="path-start">
                           <label>정원 <input type="number" min={1} max={100} value={boardCap} onChange={(e) => setBoardCap(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} aria-label="프로젝트 정원" />명</label>
-                          <select aria-label="참가 받기 시간" value={boardMinutes} onChange={(e) => setBoardMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{m ? m + "분" : "제한 없음"}</option>)}</select>
+                          <select aria-label="참가 받기 시간" value={boardMinutes} onChange={(e) => setBoardMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{voteTimeLabel(m)}</option>)}</select>
                           <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startBoard(pv.id)}><Crown size={14} /> 프로젝트 참가 받기</button>
                         </span>}
                     </>;
                   }
                   if (!leader || ended) return null;
                   return <span className="path-start">
-                    <select aria-label="팀·개별 투표 시간" value={pathMinutes} onChange={(e) => setPathMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{m ? m + "분" : "제한 없음"}</option>)}</select>
+                    <select aria-label="팀·개별 투표 시간" value={pathMinutes} onChange={(e) => setPathMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{voteTimeLabel(m)}</option>)}</select>
                     <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startPath(room.id)}><Users size={14} /> 팀·개별 투표 열기</button>
                   </span>;
                 })()}
@@ -713,7 +714,7 @@ export function ProjectSteps(p: StepsProps) {
               ))}
             </ul>
             <div className="vote-detail-actions">
-              <label>투표 시간 <select aria-label="새 투표의 투표 시간" value={voteMinutes} onChange={(e) => setVoteMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{m ? m + "분" : "제한 없음"}</option>)}</select></label>
+              <label>투표 시간 <select aria-label="새 투표의 투표 시간" value={voteMinutes} onChange={(e) => setVoteMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{voteTimeLabel(m)}</option>)}</select></label>
               <label>한 사람당 <select aria-label="새 투표의 한 사람당 투표 수" value={Math.min(voteLimit, Math.max(1, picked.length))} onChange={(e) => setVoteLimit(Number(e.target.value))} disabled={p.busy || !picked.length}>{Array.from({ length: Math.max(1, Math.min(10, picked.length)) }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}표</option>)}</select></label>
               <button type="button" className="secondary-button" onClick={() => setPicking(false)}>취소</button>
               <button type="button" className="primary-button" disabled={p.busy || !picked.length} onClick={openNewVote}><Vote size={15} /> {picked.length}장으로 투표 시작</button>

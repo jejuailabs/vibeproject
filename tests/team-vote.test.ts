@@ -99,6 +99,28 @@ test('a timed vote refuses late ballots, then any member may close it and non-vo
  assert.equal(vote(s)!.data.state,'closed');assert.equal(vote(s)!.data.endedBy,'time');assert.equal(vote(s)!.data.abstained,members-1);
 });
 
+test('6 to 72 hour deadlines persist for main votes, path votes and participation boards',async()=>{
+ for(const hours of [6,12,24,48,72]){
+  const w=previewWorkspace();
+  const card={...structuredClone(w.ideas.find(i=>i.id==='i1')!),id:'long-vote-card',ownerId:'seo',projectId:'p-onboarding',scope:'project' as const};w.ideas.push(card);
+  let s:State={workspace:w,records:[]};
+  const minutes=hours*60;
+  await assert.rejects(run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',minutes:4321}));
+  s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',minutes});
+  const main=vote(s)!;
+  assert.equal(Date.parse(main.data.endsAt!)-Date.parse(main.data.openedAt),hours*3600000);
+  s=await run(s,'jun',{type:'castTeamVote',projectId:'p-onboarding',voteId:main.id,ideaId:card.id});
+  s=await run(s,'jun',{type:'closeTeamVote',projectId:'p-onboarding',voteId:main.id});
+  s=await run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId:main.id,minutes});
+  const path=s.records.find((r):r is RecordOf<'pathVote'>=>r.kind==='pathVote')!;
+  assert.equal(Date.parse(path.data.endsAt!)-Date.parse(path.data.openedAt),hours*3600000);
+  s=await run(s,'jun',{type:'closePathVote',projectId:'p-onboarding',pathId:path.id});
+  s=await run(s,'jun',{type:'openJoinBoard',projectId:'p-onboarding',pathId:path.id,capacity:5,minutes});
+  const board=s.records.find((r):r is RecordOf<'joinBoard'>=>r.kind==='joinBoard')!;
+  assert.equal(Date.parse(board.data.endsAt!)-Date.parse(board.data.openedAt),hours*3600000);
+ }
+});
+
 test('closing a vote marks the 1st to 5th cards with votes, ties sharing a rank',async()=>{
  const w=previewWorkspace();
  const ids=['e1','e2','e3','e4','e5','e6','e7'];

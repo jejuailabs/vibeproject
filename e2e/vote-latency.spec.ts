@@ -3,6 +3,18 @@ import type { RecordOf, WorkshopRecord } from "../src/lib/workshop/model";
 
 const date = "2026-10-25T00:00:00.000Z";
 const ids = ["card-a", "card-b", "card-c", "card-d"];
+
+test("vote duration picker offers long periods in hours", async ({ page }) => {
+  await mockWorkshop(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "새 투표 열기", exact: true }).click();
+  const picker = page.getByLabel("새 투표의 투표 시간", { exact: true });
+  for (const hours of [6, 12, 24, 48, 72]) {
+    await expect(picker.locator(`option[value="${hours * 60}"]`)).toHaveText(hours + "시간");
+  }
+  await picker.selectOption("4320");
+  await expect(picker).toHaveValue("4320");
+});
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 const deferred = () => {
   let resolve!: () => void;
