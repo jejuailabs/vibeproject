@@ -3,12 +3,6 @@
   --wk-border: #34314d;
   color: #eeeafc;
 }
-.wk-project-delete { margin-top: 18px; }
-.wk-project-delete form { display: grid; gap: 12px; margin-top: 12px; padding: 14px; border: 1px solid #ee8f9e; border-radius: 12px; }
-.wk-project-delete label { display: grid; gap: 6px; }
-.arena-shell .wk-project-delete button.danger { color: #a31c39; background: #fff4f6; border: 1px solid #e7a2b0; min-height: 40px; font-size: 13px; font-weight: 750; }
-.arena-shell .wk-project-delete button.danger:hover { color: #89132d; background: #ffe4e9; }
-.wk-project-delete button:disabled { opacity: .5; cursor: not-allowed; }
 .wk-tabs {
   display: flex;
   flex-wrap: wrap;

@@ -54,6 +54,7 @@ test("participant sees only memberships, named leader and creation reason", asyn
   await expect(voted).toContainText("담당 리더: 이준호");
   await expect(voted).toContainText("투표 후 참가 시간 종료로 자동 생성");
   await expect(page.getByRole("navigation").getByRole("button", { name: "프로젝트 관리", exact: true })).toHaveCount(0);
+  await expect(mine.locator(".project-delete-button")).toHaveCount(0);
   await mine.screenshot({ path: "work/my-projects-desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
   await mine.screenshot({ path: "work/my-projects-mobile.png" });
@@ -88,20 +89,19 @@ test("facilitator can inspect all projects but cannot transfer the leader", asyn
   await expect(management.getByRole("article")).toHaveCount(3);
   await expect(management).toContainText("투표 후 참가 시간 종료로 자동 생성");
   await expect(management.locator("summary").filter({ hasText: "담당 리더 변경" })).toHaveCount(0);
-  await expect(management.getByRole("button", { name: "프로젝트 삭제", exact: true })).toHaveCount(0);
+  await expect(management.locator(".project-delete-button")).toHaveCount(0);
 });
 
 test("admin deletes a one-member generated project and its member keeps the other project", async ({ page }) => {
   await page.getByRole("navigation").getByRole("button", { name: "프로젝트 관리", exact: true }).click();
   const management = page.getByRole("region", { name: "전체 프로젝트 관리", exact: true });
   const room = management.getByRole("article", { name: "투표에서 만들어진 프로젝트 관리 정보", exact: true });
-  await room.getByRole("button", { name: "프로젝트 삭제", exact: true }).click();
-  await room.getByLabel("삭제 이유", { exact: true }).fill("테스트 중 만들어진 프로젝트 정리");
-  await room.getByLabel("삭제할 프로젝트 이름", { exact: true }).fill("다른 방");
-  await expect(room.getByRole("button", { name: "삭제 확정", exact: true })).toBeDisabled();
-  await room.getByLabel("삭제할 프로젝트 이름", { exact: true }).fill("투표에서 만들어진 프로젝트");
-  await room.screenshot({ path: "work/project-delete-confirm.png" });
-  await room.getByRole("button", { name: "삭제 확정", exact: true }).click();
+  await management.screenshot({ path: "work/project-delete-icons.png" });
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("투표에서 만들어진 프로젝트");
+    await dialog.accept();
+  });
+  await room.getByRole("button", { name: "투표에서 만들어진 프로젝트 프로젝트 삭제", exact: true }).click();
   await expect(room).toHaveCount(0);
   await expect(management.getByRole("article")).toHaveCount(2);
   await page.getByLabel("미리보기 참가자").selectOption("jun");
@@ -114,15 +114,35 @@ test("admin deletes a one-member generated project and its member keeps the othe
   await expect(page.getByRole("region", { name: "프로젝트 단계", exact: true })).toContainText("첫걸음");
 });
 
-test("closing the deletion form keeps the project", async ({ page }) => {
+test("cancelling deletion keeps the project", async ({ page }) => {
   await page.getByRole("navigation").getByRole("button", { name: "프로젝트 관리", exact: true }).click();
   const room = page.getByRole("article", { name: "투표에서 만들어진 프로젝트 관리 정보", exact: true });
-  const remove = room.getByRole("button", { name: "프로젝트 삭제", exact: true });
-  await remove.click();
-  await expect(room.getByLabel("삭제할 프로젝트 이름", { exact: true })).toBeVisible();
-  await remove.click();
-  await expect(room.getByLabel("삭제할 프로젝트 이름", { exact: true })).toHaveCount(0);
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await room.getByRole("button", { name: "투표에서 만들어진 프로젝트 프로젝트 삭제", exact: true }).click();
   await expect(room).toBeVisible();
+});
+
+test("admin can use the trash icon on their ordinary dashboard project card", async ({ page }) => {
+  await page.goto("/?adminMember=1");
+  await page.getByRole("button", { name: "채팅 닫기", exact: true }).click();
+  await page.getByRole("button", { name: "프로젝트 공간", exact: true }).click();
+  const mine = page.getByRole("region", { name: "내 프로젝트", exact: true });
+  const remove = mine.getByRole("button", { name: "첫걸음 프로젝트 삭제", exact: true });
+  await expect(remove).toBeVisible();
+  await mine.screenshot({ path: "work/my-projects-admin-trash.png" });
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await remove.click();
+  await expect(mine).toBeVisible();
+  await expect(page.getByRole("region", { name: "프로젝트 단계", exact: true })).toHaveCount(0);
+});
+
+test("admin can delete directly from the ordinary project participation list", async ({ page }) => {
+  await page.getByRole("navigation").getByRole("button", { name: "프로젝트", exact: true }).click();
+  const row = page.locator(".lobby-row").filter({ hasText: "투표에서 만들어진 프로젝트" });
+  page.once("dialog", (dialog) => dialog.accept());
+  await row.getByRole("button", { name: "투표에서 만들어진 프로젝트 프로젝트 삭제", exact: true }).click();
+  await expect(row).toHaveCount(0);
+  await expect(page.locator(".lobby-row").filter({ hasText: "첫걸음" })).toBeVisible();
 });
 
 test("administrator's project home opens the complete management screen", async ({ page }) => {

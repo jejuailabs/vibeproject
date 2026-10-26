@@ -1,6 +1,5 @@
 "use client";
-import { useState } from "react";
-import type { Project } from "@/lib/types";
+import { ProjectDeleteButton } from "./project-delete-button";
 import { characterFor } from "@/lib/characters";
 import { projectOriginLabel, projectVisibilityLabel } from "@/lib/workshop/project-info";
 import {
@@ -120,7 +119,8 @@ export function Admin(p: Props) {
               const leader = w.members.find((m) => m.id === project.leaderId);
               const candidates = w.members.filter((m) => m.active && m.id !== project.leaderId && project.memberIds.includes(m.id));
               return (
-                <article className="wk-note" key={project.id} aria-label={project.name + " 관리 정보"}>
+                <article className="wk-note project-list-card" key={project.id} aria-label={project.name + " 관리 정보"}>
+                  {admin && <ProjectDeleteButton project={project} run={p.run} busy={p.busy} />}
                   <Badge>{project.stage}</Badge>
                   <h3>{project.name}</h3>
                   <p><strong>담당 리더</strong> {leader?.name || "이름 확인 필요"}</p>
@@ -150,7 +150,6 @@ export function Admin(p: Props) {
                       busy={p.busy || s?.data.state === "completed"}
                     />
                   ) : <p>리더를 맡길 다른 활성 팀원이 없습니다.</p>)}
-                  {admin && <DeleteProject project={project} run={p.run} busy={p.busy} />}
                 </article>
               );
             })}
@@ -366,20 +365,4 @@ export function Admin(p: Props) {
       <Inbox {...p} />
     </>
   );
-}
-
-function DeleteProject({ project, run, busy }: { project: Project; run: Props["run"]; busy: boolean }) {
-  const [open, setOpen] = useState(false), [confirmName, setConfirmName] = useState(""), [reason, setReason] = useState("");
-  return <div className="wk-project-delete">
-    <button type="button" className="secondary-button danger" aria-expanded={open} disabled={busy} onClick={() => setOpen((v) => !v)}>프로젝트 삭제</button>
-    {open && <form onSubmit={async (e) => {
-      e.preventDefault();
-      await run({ type: "deleteProject", projectId: project.id, confirmName, reason });
-    }}>
-      <p>‘{project.name}’ 프로젝트를 전체 목록과 모든 참가자의 ‘내 프로젝트’에서 삭제합니다. 참가자는 남아 있는 프로젝트로 이동합니다. 기존 자료와 삭제 이력은 보존됩니다.</p>
-      <label>삭제할 프로젝트 이름<input value={confirmName} onChange={(e) => setConfirmName(e.target.value)} maxLength={160} required autoComplete="off" /></label>
-      <label>삭제 이유<input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} required /></label>
-      <button className="primary-button danger" disabled={busy || confirmName.trim() !== project.name || !reason.trim()}>{busy ? "삭제 중…" : "삭제 확정"}</button>
-    </form>}
-  </div>;
 }

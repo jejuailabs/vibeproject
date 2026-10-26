@@ -5,6 +5,7 @@ import type { JoinPolicy, Project, Workspace } from "@/lib/types";
 import type { RecordOf, WorkshopRecord } from "@/lib/workshop/model";
 import { projectIdsOf } from "@/lib/policy";
 import { projectOriginLabel } from "@/lib/workshop/project-info";
+import { ProjectDeleteButton } from "./workshop/project-delete-button";
 
 const policyLabel: Record<JoinPolicy, string> = { open: "누구나 참여", password: "비밀번호", request: "리더 승인" };
 const policyHelp: Record<JoinPolicy, string> = {
@@ -139,7 +140,8 @@ export function ProjectLobby({ workspace: w, records, busy, preview, invite, run
           </div>
           <div className="lobby-mine">
             {myProjects.map((p) => (
-              <article key={p.id} className={"lobby-card" + (p.id === me.projectId ? " current" : "")}>
+              <article key={p.id} className={"lobby-card project-list-card" + (p.id === me.projectId ? " current" : "")}>
+                {me.role === "admin" && <ProjectDeleteButton project={p} run={run} busy={busy} />}
                 <header>
                   <span className="lobby-tag">{p.leaderId === me.id ? "리더" : "팀원"}</span>
                   {p.id === me.projectId && <span className="lobby-tag on">지금 작업 중</span>}
@@ -253,7 +255,8 @@ export function ProjectLobby({ workspace: w, records, busy, preview, invite, run
                   full = p.memberIds.length >= (p.capacity || 100),
                   leader = person(p.leaderId);
                 return (
-                  <article key={p.id} className="lobby-row">
+                  <article key={p.id} className="lobby-row project-list-card">
+                    {me.role === "admin" && <ProjectDeleteButton project={p} run={run} busy={busy} />}
                     <div className="lobby-row-main">
                       <h3>{p.name}</h3>
                       <p>{p.intro || p.problem || "소개가 아직 없어요."}</p>

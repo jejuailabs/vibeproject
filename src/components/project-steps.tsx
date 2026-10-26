@@ -11,6 +11,7 @@ import { teamVoteTitle } from "@/lib/workshop/vote-title";
 import { projectOriginLabel, projectVisibilityLabel } from "@/lib/workshop/project-info";
 import type { WorkshopRecord } from "@/lib/workshop/model";
 import { VoteShareButton } from "./workshop/vote-share-button";
+import { ProjectDeleteButton } from "./workshop/project-delete-button";
 import { recordsOf, type Props } from "./workshop/common";
 import type { VoteQueue } from "./workshop/use-vote-queue";
 import type { Command, Idea, Member, Project } from "@/lib/types";
@@ -944,13 +945,15 @@ function Tile({ n, label, hint, button, onClick }: { n: number; label: string; h
 }
 
 /** What a member sees first: only the projects they belong to, one button each. */
-export function MyProjects({ projects, me, members, records = [], busy, onOpen, onLobby }: { projects: Project[]; me: Member; members: Member[]; records?: WorkshopRecord[]; busy: boolean; onOpen: (p: Project) => void; onLobby: () => void }) {
+export function MyProjects({ projects, me, members, records = [], busy, run, onOpen, onLobby }: { projects: Project[]; me: Member; members: Member[]; records?: WorkshopRecord[]; busy: boolean; run: Props["run"]; onOpen: (p: Project) => void; onLobby: () => void }) {
   return (
     <section className="pj my-projects" aria-label="내 프로젝트">
       <header className="pj-head"><h2>내 프로젝트</h2><p>내가 참가한 프로젝트입니다. 담당 리더가 참여 승인과 팀 구성을 관리합니다.</p><p>다른 참가자는 ‘다른 프로젝트 만들기·참여하기’에서 팀 프로젝트를 찾고, 기수 운영자는 ‘프로젝트 관리’에서 전체 목록을 확인합니다.</p></header>
       <div className="pj-list">
         {projects.map((p) => (
-          <button key={p.id} className="pj-open" disabled={busy} onClick={() => onOpen(p)}>
+          <article key={p.id} className="pj-project-card project-list-card">
+          {me.role === "admin" && <ProjectDeleteButton project={p} run={run} busy={busy} />}
+          <button className="pj-open" disabled={busy} onClick={() => onOpen(p)}>
             <span className="pj-open-tag">{p.leaderId === me.id ? "리더" : "팀원"} · {p.memberIds.length}명</span>
             <strong>{p.name}</strong>
             <span className="pj-open-owner">담당 리더: {members.find((m) => m.id === p.leaderId)?.name || "확인 필요"}</span>
@@ -959,6 +962,7 @@ export function MyProjects({ projects, me, members, records = [], busy, onOpen, 
             <span className="pj-open-avatars">{p.memberIds.slice(0, 6).map((id) => <img key={id} className="steps-avatar" src={characterFor(members.find((m) => m.id === id)).image} alt="" />)}</span>
             <span className="pj-open-go">들어가기 <ArrowRight size={16} /></span>
           </button>
+          </article>
         ))}
       </div>
       <button className="pj-history" onClick={onLobby}><Plus size={14} /> 다른 프로젝트 만들기 · 참여하기</button>
