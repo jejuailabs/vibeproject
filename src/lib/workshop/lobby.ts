@@ -443,7 +443,7 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
     case "projectAccess": {
       const p = await c.store.read<Project>(path(c, "projects/" + cmd.projectId));
       if (!p) fail("프로젝트를 찾을 수 없습니다.", 404);
-      if (p.leaderId !== c.uid) fail("리더만 참여 방식을 바꿀 수 있습니다.", 403);
+      if (p.leaderId !== c.uid && c.me.role !== "admin") fail("리더나 관리자만 참여 방식을 바꿀 수 있습니다.", 403);
       const cfg = await defaults(c, p.id);
       if (cmd.joinPolicy === "password") {
         if (cmd.password) await storeSecret(c, p.id, checkPassword(cmd.password));
@@ -454,6 +454,19 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       if (cmd.resetInvite || !cfg.data.inviteCode)
         write(c, cfg.id, "project", { ...cfg.data, inviteCode: randomHex(16) }, "project", p.id, cfg.ownerId, cfg);
       event(c, "참여 방식 변경", cmd.resetInvite ? "초대 링크 새로 만들기" : cmd.joinPolicy, p.id, p.id);
+      return { id: p.id };
+    }
+    // The leader edits their own project; a cohort administrator can edit any project.
+    case "editProject": {
+      const p = await c.store.read<Project>(path(c, "projects/" + cmd.projectId));
+      if (!p) fail("프로젝트를 찾을 수 없습니다.", 404);
+      if (p.leaderId !== c.uid && c.me.role !== "admin") fail("리더나 관리자만 프로젝트 정보를 바꿀 수 있습니다.", 403);
+      if (cmd.capacity < p.memberIds.length) fail("현재 인원(" + p.memberIds.length + "명)보다 정원을 줄일 수 없습니다.");
+      const mode = cmd.capacity === 1 ? "solo" : "team",
+        cfg = await defaults(c, p.id);
+      saveProject(c, { ...p, name: cmd.name, intro: cmd.intro, capacity: cmd.capacity, mode });
+      write(c, cfg.id, "project", { ...cfg.data, mode, capacity: cmd.capacity }, "project", p.id, cfg.ownerId, cfg);
+      event(c, "프로젝트 정보 수정", cmd.name + " · 정원 " + cmd.capacity + "명", p.id, p.id);
       return { id: p.id };
     }
     default:

@@ -23,7 +23,7 @@ function fixture(timed: boolean): PreviewState {
 
 for (const timed of [true, false]) test(`closing participation retains a public origin and named leader (${timed ? "time" : "manual"})`, async () => {
   const state = await previewWorkshop(fixture(timed), { type: "closeJoinBoard", projectId: "p-onboarding", boardId: "board" });
-  const generated = state.workspace.projects.find((p) => p.id !== "p-onboarding")!;
+  const generated = state.workspace.projects.find((p) => p.createdFromVote)!;
   assert.equal(generated.leaderId, "seo", "first participant leads when the author did not join");
   assert.deepEqual(generated.memberIds, ["seo"]);
   assert.deepEqual(generated.createdFromVote, { projectId: "p-onboarding", projectName: "첫걸음", voteId: "vote", boardId: "board", endedBy: timed ? "time" : "manual" });
@@ -49,4 +49,23 @@ test("an administrator can transfer a project's leader without joining or gainin
     const candidate = { ...workspace, me: outsider, members: workspace.members.map((m) => m.id === outsider.id ? outsider : m) };
     await assert.rejects(previewWorkshop({ workspace: candidate, records: [] }, { type: "transferLeader", projectId: "p-onboarding", memberId: "seo", reason: "권한 없음" }), /팀 구성 권한/);
   }
+});
+
+test("a project's leader and any administrator can edit its name, intro and capacity; others cannot", async () => {
+  const edit = { type: "editProject", projectId: "p-space", name: "빈자리 잇기", intro: "새 소개", capacity: 8 };
+  const asUser = (id: string) => { const workspace = previewWorkspace(); workspace.me = workspace.members.find((m) => m.id === id)!; return { workspace, records: [] }; };
+  for (const id of ["ha", "min"]) {
+    const state = await previewWorkshop(asUser(id), edit);
+    const p = state.workspace.projects.find((x) => x.id === "p-space")!;
+    assert.deepEqual([p.name, p.intro, p.capacity, p.mode], ["빈자리 잇기", "새 소개", 8, "team"]);
+    assert.equal(state.records.find((r): r is RecordOf<"project"> => r.kind === "project" && r.projectId === "p-space")!.data.capacity, 8);
+  }
+  await assert.rejects(previewWorkshop(asUser("jun"), edit), /리더나 관리자만/);
+  await assert.rejects(previewWorkshop(asUser("jun"), { ...edit, projectId: "p-onboarding", capacity: 1 }), /정원을 줄일 수 없습니다/);
+});
+
+test("an administrator sees every leader's project in the workspace", () => {
+  const w = previewWorkspace();
+  assert.ok(new Set(w.projects.map((p) => p.leaderId)).size > 1);
+  assert.ok(w.projects.some((p) => !p.memberIds.includes(w.me.id)));
 });

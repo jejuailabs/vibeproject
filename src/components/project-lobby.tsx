@@ -6,6 +6,7 @@ import type { RecordOf, WorkshopRecord } from "@/lib/workshop/model";
 import { projectIdsOf } from "@/lib/policy";
 import { projectOriginLabel } from "@/lib/workshop/project-info";
 import { ProjectDeleteButton } from "./workshop/project-delete-button";
+import { ProjectEditAction } from "./workshop/project-edit-action";
 
 const policyLabel: Record<JoinPolicy, string> = { open: "누구나 참여", password: "비밀번호", request: "리더 승인" };
 const policyHelp: Record<JoinPolicy, string> = {
@@ -194,6 +195,7 @@ export function ProjectLobby({ workspace: w, records, busy, preview, invite, run
                   </div>
                 </div>
               )}
+              <ProjectEditAction project={active} run={run} busy={busy} />
             </div>
           )}
         </div>

@@ -174,6 +174,13 @@ export const workshopCommand = z.discriminatedUnion("type", [
     password: z.string().max(64).optional(),
     resetInvite: z.boolean(),
   }),
+  S({
+    type: z.literal("editProject"),
+    ...project,
+    name: z.string().trim().min(1).max(60),
+    intro: z.string().trim().max(300),
+    capacity: z.number().int().min(1).max(100),
+  }),
   S({ type: z.literal("leaveProject"), ...project, reason }),
   S({ type: z.literal("deleteProject"), ...project, confirmName: title, reason }),
   S({ type: z.literal("transferLeader"), ...project, memberId: id, reason }),

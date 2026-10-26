@@ -117,7 +117,7 @@ test("vote freezes candidates, secret ballots enforce budget, self-vote and revi
     "closed_unselected",
   );
   assert.equal(s.workspace.ideas.find((i) => i.id === "i2")!.state, "selected");
-  assert.equal(s.workspace.projects.length, 2);
+  assert.equal(s.workspace.projects.length, previewWorkspace().projects.length + 1);
 });
 test("membership rejects duplicate join, capacity overflow and leader leaving; leave permits a new request", async () => {
   let s = fresh();

@@ -9,7 +9,7 @@ export function previewWorkspace():Workspace {
  {id:'min',name:'김민지',avatar:'',role:'admin' as const,projectId:null,active:true},
  {id:'jun',name:'이준호',avatar:'',role:'participant' as const,projectId:'p-onboarding',active:true},
  {id:'seo',name:'박서연',avatar:'',role:'participant' as const,projectId:'p-onboarding',active:true},
- {id:'ha',name:'정하늘',avatar:'',role:'participant' as const,projectId:null,active:true},
+ {id:'ha',name:'정하늘',avatar:'',role:'participant' as const,projectId:'p-space',active:true},
  ];
  const ideas:Idea[]=[
  {id:'i1',title:'처음 온 사람도 편안한 커뮤니티를 만들고 싶어요',body:'새로운 모임에 가면 어디에 앉아야 할지, 누구에게 말을 걸어야 할지 막막해요. 처음 참여하는 사람과 기존 멤버를 자연스럽게 연결해주면 어떨까요?',kind:'thought',ownerId:'min',scope:'cohort',projectId:null,state:'shared',revision:1,version:1,createdAt:date,updatedAt:date},
@@ -24,7 +24,9 @@ export function previewWorkspace():Workspace {
  }
  return {cohort:{id:'preview',name:'바이브코딩 1기',week:1},me:members[0],members,ideas,
  comments:[{id:'c1',ideaId:'i1',authorId:'seo',body:'저도 공감해요! 관심사가 비슷한 사람을 미리 알 수 있다면 좋겠어요.',createdAt:date}],
- projects:[{id:'p-onboarding',name:'첫걸음',problem:'신규 입사자의 첫 일주일을 돕는 온보딩 길잡이',leaderId:'jun',memberIds:['jun','seo'],sourceIdeaId:'i2',stage:'기획 중',createdAt:date}],
+ projects:[{id:'p-onboarding',name:'첫걸음',problem:'신규 입사자의 첫 일주일을 돕는 온보딩 길잡이',leaderId:'jun',memberIds:['jun','seo'],sourceIdeaId:'i2',stage:'기획 중',createdAt:date},
+  // A second leader's room the administrator has not joined, so the admin list shows more than one project.
+  {id:'p-space',name:'빈자리 연결',problem:'주말에 비는 공간과 연습 장소가 필요한 동아리를 잇기',intro:'주말에 비는 공간과 연습 장소가 필요한 동아리를 잇기',leaderId:'ha',memberIds:['ha'],sourceIdeaId:'i3',stage:'기획 중',createdAt:date,mode:'team',capacity:4,joinPolicy:'open'}],
  activity:{id:'discovery',title:'작은 불편에서, 새로운 가능성으로',question:'일상에서 바꾸고 싶은 순간이 있나요?',description:'정답은 없어요. 직접 겪은 불편한 순간 하나를 동료들과 나눠보세요.',state:'open',week:1},
  messages:[{id:'m1',authorId:'jun',body:'오늘 나눈 이야기들이 정말 흥미로웠어요 👋',channel:'cohort',createdAt:date},{id:'m2',authorId:'seo',body:'아이디어 보드에 질문을 남겼어요. 같이 이야기해봐요!',channel:'cohort',createdAt:date}],
  events:ideas.flatMap(i=>[{id:'e'+i.id,ideaId:i.id,title:'첫 생각 공유',reason:'오프라인 대화에서 출발한 첫 아이디어',actorId:i.ownerId,createdAt:date,revision:1,snapshot:{title:i.title,body:i.body,scope:i.scope,state:'shared' as const}},...(i.refinement?[{id:'ref-'+i.id,ideaId:i.id,title:'문제정의 초안 1 · 선정 준비',reason:'경험과 통제범위를 구체화한 샘플',actorId:i.ownerId,createdAt:date,revision:2,snapshot:{title:i.title,body:i.body,scope:i.scope,state:'shared' as const,refinement:structuredClone(i.refinement)}}]:[])])};

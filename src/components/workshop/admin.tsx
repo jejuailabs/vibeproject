@@ -1,5 +1,6 @@
 "use client";
 import { ProjectDeleteButton } from "./project-delete-button";
+import { ProjectEditAction } from "./project-edit-action";
 import { characterFor } from "@/lib/characters";
 import { projectOriginLabel, projectVisibilityLabel } from "@/lib/workshop/project-info";
 import {
@@ -111,7 +112,7 @@ export function Admin(p: Props) {
     <>
       <Box id="project-management" title="전체 프로젝트 관리" eyebrow="PROJECT MANAGEMENT">
         <p>이 기수의 모든 프로젝트입니다. 직접 참여하지 않은 프로젝트와 투표 후 생성된 프로젝트도 표시됩니다.</p>
-        <p>담당 리더가 프로젝트와 참여 신청을 관리합니다. 기수 관리자는 아래에서 리더를 변경하거나 프로젝트를 삭제할 수 있습니다.</p>
+        <p>담당 리더가 프로젝트와 참여 신청을 관리합니다. 기수 관리자는 아래에서 프로젝트 정보·정원을 수정하고, 리더를 변경하거나 프로젝트를 삭제할 수 있습니다.</p>
         <p>프로젝트 목록은 기수 참가자에게 공개되며, 내부 문서와 대화는 참여자와 지원 권한을 받은 운영자가 볼 수 있습니다.</p>
         {w.projects.length === 0 ? <Empty>아직 생성된 프로젝트가 없습니다.</Empty> : (
           <div className="wk-grid">
@@ -136,6 +137,7 @@ export function Admin(p: Props) {
                       return (member?.name || "이름 확인 필요") + (id === project.leaderId ? " (리더)" : "") + (member && !member.active ? " · 참여 중지" : "");
                     }).join(", ") || "참가자가 없습니다."}</p>
                   </details>
+                  {admin && <ProjectEditAction project={project} run={p.run} busy={p.busy} />}
                   {admin && (candidates.length ? (
                     <Action
                       key={project.leaderId + ":" + candidates.map((m) => m.id).join(",")}

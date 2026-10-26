@@ -40,7 +40,7 @@ export async function project(
   );
   if (access === "member" && !inTeam && !grant)
     fail("팀 자료 접근 권한이 없습니다.", 403);
-  if (access === "leader" && p.leaderId !== c.uid)
+  if (access === "leader" && p.leaderId !== c.uid && c.me.role !== "admin")
     fail("팀장이 확정할 수 있습니다.", 403);
   if (access === "roster" && p.leaderId !== c.uid && c.me.role !== "admin")
     fail("팀 구성 권한이 없습니다.", 403);

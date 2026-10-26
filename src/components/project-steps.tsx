@@ -12,6 +12,7 @@ import { projectOriginLabel, projectVisibilityLabel } from "@/lib/workshop/proje
 import type { WorkshopRecord } from "@/lib/workshop/model";
 import { VoteShareButton } from "./workshop/vote-share-button";
 import { ProjectDeleteButton } from "./workshop/project-delete-button";
+import { ProjectEditAction } from "./workshop/project-edit-action";
 import { recordsOf, type Props } from "./workshop/common";
 import type { VoteQueue } from "./workshop/use-vote-queue";
 import type { Command, Idea, Member, Project } from "@/lib/types";
@@ -964,6 +965,7 @@ export function MyProjects({ projects, me, members, records = [], busy, run, onO
             <span className="pj-open-avatars">{p.memberIds.slice(0, 6).map((id) => <img key={id} className="steps-avatar" src={characterFor(members.find((m) => m.id === id)).thumbnail} alt="" loading="lazy" decoding="async" />)}</span>
             <span className="pj-open-go">{admin && (!mine.includes(p.id) || !p.memberIds.includes(me.id)) ? "관리 정보" : "들어가기"} <ArrowRight size={16} /></span>
           </button>
+          {(admin || p.leaderId === me.id) && <ProjectEditAction project={p} run={run} busy={busy} />}
           </article>
         ))}
       </div>
