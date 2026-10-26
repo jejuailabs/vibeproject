@@ -69,3 +69,15 @@ test("an administrator sees every leader's project in the workspace", () => {
   assert.ok(new Set(w.projects.map((p) => p.leaderId)).size > 1);
   assert.ok(w.projects.some((p) => !p.memberIds.includes(w.me.id)));
 });
+
+test("raising a full project's capacity lets the next person join", async () => {
+  const workspace = previewWorkspace();
+  workspace.me = workspace.members.find((m) => m.id === "jun")!;
+  const full = { workspace, records: [] as PreviewState["records"] };
+  full.workspace.projects = full.workspace.projects.map((p) => p.id === "p-onboarding" ? { ...p, capacity: 2, joinPolicy: "open" as const } : p);
+  const asHa = (s: PreviewState) => ({ ...s, workspace: { ...s.workspace, me: s.workspace.members.find((m) => m.id === "ha")! } });
+  await assert.rejects(previewWorkshop(asHa(full), { type: "enterProject", projectId: "p-onboarding" }), /정원이 가득/);
+  const raised = await previewWorkshop(full, { type: "editProject", projectId: "p-onboarding", name: "첫걸음", intro: "", capacity: 3 });
+  const joined = await previewWorkshop(asHa(raised), { type: "enterProject", projectId: "p-onboarding" });
+  assert.ok(joined.workspace.projects.find((p) => p.id === "p-onboarding")!.memberIds.includes("ha"));
+});
