@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronDown, Crown, Download, LoaderCircle, MessageCircle, Pencil, Plus, Sparkles, Trash2, Users, Vote, X } from "lucide-react";
 import { IdeaRefinement } from "./idea-refinement";
+import { IdeaAuthorField } from "./idea-author-field";
 import { characterFor } from "@/lib/characters";
 import { canReadIdea, projectIdsOf } from "@/lib/policy";
 import { answered, definitionFields, questionFields, statement } from "@/lib/refinement";
@@ -91,6 +92,7 @@ export function ProjectSteps(p: StepsProps) {
   const [step, setStep] = useState<StepKey | null>(p.initialStep ?? null);
   const [writing, setWriting] = useState(false), [quick, setQuick] = useState(false);
   const [editCard, setEditCard] = useState<Idea | null>(null), [editTitle, setEditTitle] = useState(""), [editBody, setEditBody] = useState("");
+  const [editAuthor, setEditAuthor] = useState("");
   const [selectedId, setSelectedId] = useState((mine.find((i) => i.state === "shared") || mine[0])?.id || "");
   const myCard = mine.find((i) => i.id === selectedId) || mine.find((i) => i.state === "shared") || mine[0];
   const [title, setTitle] = useState(""), [body, setBody] = useState("");
@@ -221,10 +223,10 @@ export function ProjectSteps(p: StepsProps) {
   const canContinue = (i: Idea) => i.ownerId === me.id && i.state === "shared" && !ended;
   function continueAt(at: StepKey, i: Idea) { setSelectedId(i.id); setStep(at); setWriting(true); }
   // Fixing a card opens its title and story right away; deleting asks once and removes it.
-  function startEdit(i: Idea) { setEditCard(i); setEditTitle(i.title); setEditBody(i.body); setWriting(true); }
+  function startEdit(i: Idea) { setEditCard(i); setEditTitle(i.title); setEditBody(i.body); setEditAuthor(i.authorName || ""); setWriting(true); }
   async function saveEdit(e: FormEvent) {
     e.preventDefault();
-    if (editCard && (await p.saveIdea({ type: "editIdea", id: editCard.id, revision: editCard.revision, title: editTitle.trim(), body: editBody.trim(), reason: "카드 내용 고침" }))) setWriting(false);
+    if (editCard && (await p.saveIdea({ type: "editIdea", id: editCard.id, revision: editCard.revision, title: editTitle.trim(), body: editBody.trim(), authorName: editAuthor.trim(), reason: "카드 내용·작성자 고침" }))) setWriting(false);
   }
   const canDelete = (i: Idea) => (i.ownerId === me.id || me.role === "admin") && i.state !== "selected" && team.confirmedProblem?.ideaId !== i.id && !ended;
   async function removeCard(i: Idea) {
@@ -485,7 +487,7 @@ export function ProjectSteps(p: StepsProps) {
                 {step === "questions" && <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p>{answered(i.refinement) ? (
                   <dl>{questionFields.map(([k, label]) => i.refinement?.answers[k]?.trim() ? <div key={k}><dt>{label}</dt><dd>{i.refinement.answers[k]}</dd></div> : null)}</dl>
                 ) : <p className="steps-muted">아직 질문에 답하지 않았어요.</p>}</>}
-                {step === "definition" && (done ? <ProblemCard value={i.refinement!} origin={i.title} compact /> : <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p><p className="steps-muted">{answered(i.refinement) === questionFields.length ? "문제 카드를 만드는 중이에요." : "2단계 경험 질문부터 답해야 해요."}</p></>)}
+                {step === "definition" && (done ? <ProblemCard value={i.refinement!} member={owner} author={i.authorName} origin={i.title} compact /> : <><h4>{i.title}</h4><p className="pad-origin">{i.body}</p><p className="steps-muted">{answered(i.refinement) === questionFields.length ? "문제 카드를 만드는 중이에요." : "2단계 경험 질문부터 답해야 해요."}</p></>)}
                 <footer>
                   {canContinue(i) && <button type="button" className="text-button pad-manage" disabled={p.busy} onClick={(e) => { e.stopPropagation(); startEdit(i); }}><Pencil size={12} /> 고치기</button>}
                   {canDelete(i) && <button type="button" className="text-button pad-manage danger" disabled={p.busy} onClick={(e) => { e.stopPropagation(); void removeCard(i); }}><Trash2 size={12} /> 삭제</button>}
@@ -633,14 +635,14 @@ export function ProjectSteps(p: StepsProps) {
               })}
               {!boardProblems.length && <div className="steps-empty"><p>아직 완성된 문제 카드가 없어요.</p><button type="button" className="primary-button" onClick={() => setStep("definition")}>문제 카드 만들러 가기 <ArrowRight size={15} /></button></div>}
             </div>
-            <dialog ref={detailRef} className="modal vote-detail" onCancel={() => setDetailId(null)} onClick={(e) => { if (e.target === e.currentTarget) setDetailId(null); }}>
+            <dialog ref={detailRef} className="modal vote-detail" aria-label="문제 카드 자세히 보기" onCancel={() => setDetailId(null)} onClick={(e) => { if (e.target === e.currentTarget) setDetailId(null); }}>
               {detail && (
                 <>
                   <div className="vote-detail-head">
                     <Owner member={w.members.find((m) => m.id === detail.ownerId)} mine={detail.ownerId === me.id} author={detail.authorName} />
                     <button type="button" className="icon-button" aria-label="닫기" onClick={() => setDetailId(null)}><X size={20} /></button>
                   </div>
-                  <ProblemCard value={detail.refinement!} origin={detail.title} badge={vote?.data.state === "closed" ? <span className="pad-count">{vote.data.counts[detail.id] || 0}표</span> : undefined} />
+                  <ProblemCard value={detail.refinement!} member={w.members.find((m) => m.id === detail.ownerId)} author={detail.authorName} origin={detail.title} badge={vote?.data.state === "closed" ? <span className="pad-count">{vote.data.counts[detail.id] || 0}표</span> : undefined} />
                   <div className="vote-detail-actions">
                     <button type="button" className="secondary-button" onClick={() => { setDetailId(null); p.onIdea(detail.id); }}><MessageCircle size={14} /> 의견 {commentCount(detail.id)} · 남기기</button>
                     {cardAction(detail)}
@@ -927,12 +929,13 @@ export function ProjectSteps(p: StepsProps) {
             </header>
             {editCard ? (
               <form className="steps-form" onSubmit={saveEdit}>
+                <IdeaAuthorField value={editAuthor} onChange={setEditAuthor} authors={members.map((m) => m.name)} accountName={me.name} disabled={p.busy} />
                 <label>무슨 일이었나요?<input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} maxLength={120} required disabled={p.busy} /></label>
                 <label>언제, 누구에게, 무엇이 불편했나요?<textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={6} maxLength={5000} required disabled={p.busy} /></label>
                 <div className="steps-actions">
                   {answered(editCard.refinement) > 0 && <button type="button" className="secondary-button" disabled={p.busy} onClick={() => { const i = editCard; setEditCard(null); continueAt(answered(i.refinement) === questionFields.length ? "definition" : "questions", i); }}>2·3단계 답 고치기</button>}
                   <small>{editCard.refinement?.ready ? "제목·내용을 고치면 문제 카드는 다시 확인 상태가 돼요." : ""}</small>
-                  <button className="primary-button" disabled={p.busy || !editTitle.trim() || !editBody.trim() || (editTitle.trim() === editCard.title && editBody.trim() === editCard.body)}>고친 내용 저장</button>
+                  <button className="primary-button" disabled={p.busy || !editTitle.trim() || !editBody.trim() || (editTitle.trim() === editCard.title && editBody.trim() === editCard.body && editAuthor.trim() === (editCard.authorName || ""))}>고친 내용 저장</button>
                 </div>
               </form>
             ) : quick && p.makeDraft ? (
@@ -958,7 +961,7 @@ export function ProjectSteps(p: StepsProps) {
             ) : myCard.state !== "shared" ? (
               <div className="steps-empty"><p>이 카드는 {myCard.state === "selected" ? "프로젝트 출발 카드로" : "투표·종료로"} 고정되어 고칠 수 없어요.</p><button className="primary-button" onClick={() => setStep("thought")}><Plus size={15} /> 새 생각 올리기</button></div>
             ) : (
-              <IdeaRefinement key={myCard.id + step} idea={myCard} editable hasProject teamOnly busy={p.busy} run={p.saveIdea} activePanel={step === "definition" ? "definition" : "questions"} onPanelChange={(panel) => setStep(panel)} coach={p.askCoach} makeCard={p.makeCard} makeDraft={p.makeDraft} aiEnabled={p.ai?.enabled} owner={me} />
+              <IdeaRefinement key={myCard.id + step} idea={myCard} editable hasProject teamOnly busy={p.busy} run={p.saveIdea} activePanel={step === "definition" ? "definition" : "questions"} onPanelChange={(panel) => setStep(panel)} coach={p.askCoach} makeCard={p.makeCard} makeDraft={p.makeDraft} aiEnabled={p.ai?.enabled} owner={me} authors={members.map((m) => m.name)} />
             )}
           </>
         )}

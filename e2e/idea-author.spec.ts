@@ -1,0 +1,72 @@
+import { test, expect } from "@playwright/test";
+
+test("the proposed author stays editable through experience and completed problem cards without losing drafts or readiness", async ({ page }, info) => {
+  await page.route("**/*", (route) => {
+    const url = new URL(route.request().url());
+    return url.origin === "http://127.0.0.1:3108" && !url.pathname.startsWith("/api/") ? route.continue() : route.abort();
+  });
+  await page.goto("/?mobile=1");
+  await page.getByLabel("미리보기 참가자").selectOption("jun");
+  await page.locator(".pj-open").filter({ hasText: "첫걸음" }).click();
+  await page.locator(".pj-step").filter({ hasText: "각자 생각" }).click();
+  await page.getByRole("button", { name: "긴 글·파일로 한 번에", exact: true }).click();
+  const composer = page.getByRole("dialog", { name: /입력$/ });
+  await composer.getByLabel("문제를 제안한 작성자", { exact: true }).fill("첫 제안자");
+  await composer.locator(".quick-text").fill("처음 참석한 사람이 대화할 상대를 찾지 못해 혼자 기다렸던 경험입니다.");
+  await composer.getByRole("button", { name: "AI로 한 번에 정리하기", exact: true }).click();
+  await composer.getByText("AI가 채운 1·2·3단계 내용 보기·고치기", { exact: true }).click();
+  const fields = composer.locator(".quick-fields textarea");
+  await expect(fields).toHaveCount(12);
+  for (let index=0; index<12; index++) await fields.nth(index).fill(index === 0 ? "제안자 변경을 확인할 문제" : "처음 참석한 사람이 모임 시작 전 대화 상대를 찾지 못해 혼자 기다립니다.");
+  await composer.getByRole("button", { name: "새 카드로 저장하기", exact: true }).click();
+  await expect(composer).not.toBeVisible();
+  const card = () => page.locator(".pad-card").filter({ hasText: "제안자 변경을 확인할 문제" });
+  await expect(card()).toContainText("첫 제안자");
+  await card().click();
+  const author = composer.getByLabel("문제를 제안한 작성자", { exact: true });
+  await expect(author).toHaveValue("첫 제안자");
+  // Name-only saving must not reset a completed card or discard unsaved answers.
+  const firstAnswer = composer.locator(".refinement-editor form textarea").first();
+  await firstAnswer.fill("아직 저장하지 않은 문제 답변");
+  await author.fill("문제 카드 제안자");
+  await composer.getByRole("button", { name: "작성자 이름 저장", exact: true }).click();
+  await expect(composer).toContainText("카드 내용과 완성 상태는 그대로 유지돼요");
+  await expect(firstAnswer).toHaveValue("아직 저장하지 않은 문제 답변");
+  await expect(composer.locator(".refinement-conflict")).toHaveCount(0);
+  await author.scrollIntoViewIfNeeded();
+  expect(await composer.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+  await page.screenshot({ path: "work/idea-author-" + info.project.name + ".png" });
+  await composer.getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(card()).toContainText("문제 카드 제안자");
+  await expect(card().locator(".problem-card")).toHaveCount(1);
+
+  await page.getByRole("navigation", { name: "단계 이동" }).getByRole("button", { name: /경험 구체화/ }).click();
+  await card().click();
+  await expect(author).toHaveValue("문제 카드 제안자");
+  await author.fill("경험 단계에서 고친 제안자");
+  await composer.getByRole("button", { name: "저장하고 다음 단계로", exact: true }).click();
+  await expect(author).toHaveValue("경험 단계에서 고친 제안자");
+  await composer.getByRole("button", { name: "문제 카드 완성", exact: true }).click();
+  await composer.getByRole("button", { name: "닫기", exact: true }).click();
+  await expect(card()).toContainText("경험 단계에서 고친 제안자");
+  // The card footer's existing edit action must expose the same name field.
+  await card().getByRole("button", { name: "고치기", exact: true }).click();
+  await expect(author).toHaveValue("경험 단계에서 고친 제안자");
+  await author.fill("");
+  await composer.getByRole("button", { name: "고친 내용 저장", exact: true }).click();
+  await expect(card()).toContainText("이준호");
+  await expect(card().locator(".problem-card")).toHaveCount(1);
+  await card().getByRole("button", { name: "고치기", exact: true }).click();
+  await author.fill("최종 제안자");
+  await composer.getByRole("button", { name: "고친 내용 저장", exact: true }).click();
+  await page.getByRole("navigation", { name: "단계 이동" }).getByRole("button", { name: /최종 아이디어·투표/ }).click();
+  await page.getByRole("button", { name: "새 투표 열기", exact: true }).click();
+  await page.getByRole("dialog", { name: "투표 후보 고르기", exact: true }).getByRole("button", { name: "3장으로 투표 시작", exact: true }).click();
+  await page.locator(".vote-card.open").getByRole("button", { name: "투표하러 가기", exact: true }).click();
+  const tile = page.locator(".vote-tile").filter({ hasText: "제안자 변경을 확인할 문제" });
+  await expect(tile).toContainText("최종 제안자");
+  await tile.getByRole("button", { name: "자세히 보기", exact: true }).click();
+  const detail = page.getByRole("dialog", { name: "문제 카드 자세히 보기", exact: true });
+  await detail.getByRole("button", { name: "텍스트로 한꺼번에", exact: true }).click();
+  await expect(page.getByLabel("정리된 카드 텍스트")).toHaveValue(/작성자: 최종 제안자/);
+});

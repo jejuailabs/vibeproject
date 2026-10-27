@@ -5,6 +5,7 @@ import { DRAFT_FILE_BYTES, draftFileTypes, emptyDraft, type DraftAsk, type Draft
 import { emptyRefinement, questionFields, definitionFields, sentenceFields, type Refinement } from "@/lib/refinement";
 import type { Member } from "@/lib/types";
 import { ProblemCard } from "./card-view";
+import { IdeaAuthorField } from "./idea-author-field";
 
 const labels: Record<DraftKey, string> = {
   title: "1단계 · 무슨 일이었나요?", body: "1단계 · 겪은 일",
@@ -71,12 +72,7 @@ export function QuickDraft({ ask, member, initial, doneLabel, onDone, onCancel, 
   const card = fields ? draftRefinement(fields) : null;
   const sentence = !!card && sentenceFields.every(([k]) => card.definition[k].trim());
   // Optional for a new card: whose experience this is when someone else (usually an admin) writes it up.
-  const authorField = authors && (
-    <label className="quick-author">작성자 <small>다른 사람의 이야기를 정리할 때만 적어요. 비우면 내 이름으로 올라가요.</small>
-      <input value={author} onChange={(e) => setAuthor(e.target.value)} maxLength={40} list="quick-authors" placeholder="예: 김지수" disabled={busy} />
-      <datalist id="quick-authors">{authors.map((n) => <option key={n} value={n} />)}</datalist>
-    </label>
-  );
+  const authorField = authors && <IdeaAuthorField value={author} onChange={setAuthor} authors={authors} disabled={busy} accountName={member?.name} />;
   return (
     <section className="quick-draft" aria-label="긴 글로 한 번에 만들기">
       {!fields ? (

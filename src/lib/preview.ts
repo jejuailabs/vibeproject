@@ -2,6 +2,7 @@ import {validateFeedbackContext,feedbackContextSchema} from './exhibition';
 import {nextRefinement,statement,emptyRefinement} from './refinement';
 import type {Workspace,Command,Idea,HistoryEvent} from './types';
 import {isCharacterId} from './characters';
+import {editedIdea,ideaAuthorPatch} from './idea-edit';
 import {assertAdmin,assertDeletable,assertEditable,assertCanRead,assertChannel,validateSelection,projectIdsOf} from './policy';
 const date='2026-10-12T01:00:00.000Z';
 export function previewWorkspace():Workspace {
@@ -34,7 +35,7 @@ export function previewWorkspace():Workspace {
 export function previewCommand(state:Workspace,command:Command):Workspace {
  const next=structuredClone(state), now=new Date().toISOString(), uid=next.me.id;
  const uuid=()=>crypto.randomUUID();
- const record=(idea:Idea,title:string,reason:string)=>next.events.unshift({id:uuid(),ideaId:idea.id,title,reason,actorId:uid,createdAt:now,revision:idea.revision,snapshot:{title:idea.title,body:idea.body,scope:idea.scope,state:idea.state,...(idea.refinement?{refinement:idea.refinement}:{})}});
+ const record=(idea:Idea,title:string,reason:string)=>next.events.unshift({id:uuid(),ideaId:idea.id,title,reason,actorId:uid,createdAt:now,revision:idea.revision,snapshot:{title:idea.title,body:idea.body,scope:idea.scope,state:idea.state,...ideaAuthorPatch(idea.authorName),...(idea.refinement?{refinement:idea.refinement}:{})}});
  if(command.type==='setAvatar'){
   if(!next.me.active)throw new Error('기수 참여 권한이 필요합니다.');
   if(!isCharacterId(command.avatarId))throw new Error('등록된 캐릭터를 선택해주세요.');
@@ -56,10 +57,10 @@ export function previewCommand(state:Workspace,command:Command):Workspace {
    assertEditable(next.me,idea,command.revision);
    if(command.scope==='project'&&!next.me.projectId)throw new Error('프로젝트에 먼저 참여해주세요.');
    if(command.scope!==idea.scope&&command.scope!=='owner'&&next.activity.state!=='open')throw new Error('현재 활동이 마감되어 공유 범위를 바꿀 수 없습니다.');
-   idea.refinement=nextRefinement(idea,command.phase,command.input,command.reason);idea.scope=command.scope;idea.projectId=command.scope==='project'?next.me.projectId:null;idea.revision++;idea.version++;idea.updatedAt=now;
+   Object.assign(idea,ideaAuthorPatch(command.authorName));idea.refinement=nextRefinement(idea,command.phase,command.input,command.reason);idea.scope=command.scope;idea.projectId=command.scope==='project'?next.me.projectId:null;idea.revision++;idea.version++;idea.updatedAt=now;
    record(idea,command.phase==='questions'?'경험 질문에 답함':'문제정의 초안 '+idea.refinement.draft+(idea.refinement.ready?' · 선정 준비':''),command.reason);
   }
-  else if(command.type==='editIdea'){assertEditable(next.me,idea,command.revision);idea.title=command.title;idea.body=command.body;if(idea.refinement)idea.refinement={...idea.refinement,ready:false,definition:{...idea.refinement.definition,solutionReviewed:false}};idea.revision++;idea.version++;idea.updatedAt=now;record(idea,'생각을 구체화했어요',command.reason);}
+  else if(command.type==='editIdea'){assertEditable(next.me,idea,command.revision);const contentChanged=idea.title!==command.title||idea.body!==command.body;Object.assign(idea,editedIdea(idea,command,now));record(idea,contentChanged?'생각을 구체화했어요':'작성자 이름 수정',command.reason);}
   else if(command.type==='closeIdea'){assertAdmin(next.me);idea.state='closed_unselected';idea.revision++;record(idea,'아이디어 종료',command.reason);}
   else{
    const owner=next.members.find(m=>m.id===idea.ownerId)!;validateSelection(next.me,idea,command.revision,owner);

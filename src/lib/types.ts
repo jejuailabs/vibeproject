@@ -22,15 +22,15 @@ export type Project = { id: string; name: string; problem: string; leaderId: str
 export type ConfirmedProblem = { ideaId: string; ownerId: string; revision: number; draft: number; statement: string; reason: string; confirmedBy: string; confirmedAt: string };
 export type Message = { id: string; authorId: string; body: string; channel: string; createdAt: string; step?: StepKey; replyToId?: string; mentions?: string[]; revision?: number; pinned?: boolean; editedAt?: string };
 export type Activity = { id: string; title: string; question: string; description: string; state: 'open' | 'closed'; week: number };
-export type HistoryEvent = { id: string; ideaId: string; title: string; reason: string; actorId: string; createdAt: string; revision: number; snapshot: Pick<Idea, 'title' | 'body' | 'scope' | 'state' | 'refinement'> };
+export type HistoryEvent = { id: string; ideaId: string; title: string; reason: string; actorId: string; createdAt: string; revision: number; snapshot: Pick<Idea, 'title' | 'body' | 'scope' | 'state' | 'refinement' | 'authorName'> };
 export type Workspace = {
  cohort: { id: string; name: string; week: number }; me: Member; members: Member[]; ideas: Idea[];
  comments: Comment[]; projects: Project[]; activity: Activity; messages: Message[]; events: HistoryEvent[];
 };
 export type Command =
  | { type: 'createIdea'; title: string; body: string; kind: Idea['kind']; scope: Scope; authorName?: string }
- | { type: 'refineIdea'; id: string; revision: number; phase: 'questions'|'definition'; input: RefinementInput; reason: string; scope: Scope }
- | { type: 'editIdea'; id: string; revision: number; title: string; body: string; reason: string }
+ | { type: 'refineIdea'; id: string; revision: number; phase: 'questions'|'definition'; input: RefinementInput; reason: string; scope: Scope; authorName?: string }
+ | { type: 'editIdea'; id: string; revision: number; title: string; body: string; reason: string; authorName?: string }
  | { type: 'deleteIdea'; id: string; revision: number }
  | { type: 'comment'; ideaId: string; body: string; context?: FeedbackContext }
  | { type: 'sendMessage'; channel: string; body: string; step?: StepKey }

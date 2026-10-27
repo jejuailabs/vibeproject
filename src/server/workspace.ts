@@ -8,14 +8,15 @@ import type { Activity, Command, Comment, HistoryEvent, Idea, Member, Message, P
 import { z } from 'zod';
 import {characterIds} from '@/lib/characters';
 import {stepKey} from '@/lib/steps';
+import {editedIdea,ideaAuthorPatch,ideaAuthorSchema} from '@/lib/idea-edit';
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const short = z.string().trim().min(1).max(120);
 const body = z.string().trim().min(1).max(5000);
 const commandSchema = z.discriminatedUnion('type', [
- z.object({ type: z.literal('createIdea'), title: short, body, kind: z.enum(['thought','question','progress']), scope: z.enum(['owner','project','cohort']), authorName: z.string().trim().max(40).optional() }),
- z.object({type:z.literal('refineIdea'),id,revision:z.number().int().nonnegative(),phase:z.enum(['questions','definition']),input:refinementInputSchema,reason:short,scope:z.enum(['owner','project','cohort'])}),
- z.object({ type: z.literal('editIdea'), id, revision: z.number().int().nonnegative(), title: short, body, reason: short }),
+ z.object({ type: z.literal('createIdea'), title: short, body, kind: z.enum(['thought','question','progress']), scope: z.enum(['owner','project','cohort']), authorName: ideaAuthorSchema.optional() }),
+ z.object({type:z.literal('refineIdea'),id,revision:z.number().int().nonnegative(),phase:z.enum(['questions','definition']),input:refinementInputSchema,reason:short,scope:z.enum(['owner','project','cohort']),authorName:ideaAuthorSchema.optional()}),
+ z.object({ type: z.literal('editIdea'), id, revision: z.number().int().nonnegative(), title: short, body, reason: short, authorName:ideaAuthorSchema.optional() }),
  z.object({ type: z.literal('deleteIdea'), id, revision: z.number().int().nonnegative() }),
  z.object({ type: z.literal('comment'), ideaId: id, body, context:feedbackContextSchema.optional() }),
  z.object({ type: z.literal('sendMessage'), channel: id, body: body.max(2000), step: stepKey.optional() }),
@@ -114,7 +115,7 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
   const history=(idea:Idea,title:string,reason:string) => {
    const ref=c.collection('ideas').doc(idea.id).collection('history').doc();
    tx.create(ref,{id:ref.id,ideaId:idea.id,title,reason,actorId:uid,createdAt:now,revision:idea.revision,
-    snapshot:{title:idea.title,body:idea.body,scope:idea.scope,state:idea.state,...(idea.refinement?{refinement:idea.refinement}:{})}});
+    snapshot:{title:idea.title,body:idea.body,scope:idea.scope,state:idea.state,...ideaAuthorPatch(idea.authorName),...(idea.refinement?{refinement:idea.refinement}:{})}});
   };
   if(command.type==='setAvatar') {
    tx.update(memberRef,{avatar:command.avatarId,updatedAt:now});
@@ -176,12 +177,12 @@ export async function runCommand(cohortId: string, uid: string, requestId: strin
      if(activity.data()?.state!=='open'||activity.data()?.closesAt&&activity.data()?.closesAt<=now)throw new DomainError('CLOSED','현재 활동이 마감되어 공유 범위를 바꿀 수 없습니다.',409);
     }
     const refinement=nextRefinement(idea,command.phase,command.input,command.reason);
-    const next={...idea,refinement,scope:command.scope,projectId:command.scope==='project'?me.projectId:null,revision:idea.revision+1,version:idea.version+1,updatedAt:now};
+    const next={...idea,...ideaAuthorPatch(command.authorName),refinement,scope:command.scope,projectId:command.scope==='project'?me.projectId:null,revision:idea.revision+1,version:idea.version+1,updatedAt:now};
     tx.update(ref,next);history(next,command.phase==='questions'?'경험 질문에 답함':'문제정의 초안 '+refinement.draft+(refinement.ready?' · 선정 준비':''),command.reason);result={id:ideaId};
    } else if(command.type==='editIdea') {
     assertEditable(me,idea,command.revision);
-    const next={...idea,...(idea.refinement?{refinement:{...idea.refinement,ready:false,definition:{...idea.refinement.definition,solutionReviewed:false}}}:{}),title:command.title,body:command.body,revision:idea.revision+1,version:idea.version+1,updatedAt:now};
-    tx.update(ref,next);history(next,'생각을 구체화했어요',command.reason);result={id:ideaId};
+    const next=editedIdea(idea,command,now);
+    tx.update(ref,next);history(next,idea.title===next.title&&idea.body===next.body?'작성자 이름 수정':'생각을 구체화했어요',command.reason);result={id:ideaId};
    } else if(command.type==='closeIdea') {
     assertAdmin(me);assertRevision(idea,command.revision);
     if(idea.scope!=='cohort'||idea.state!=='shared') throw new DomainError('INVALID_STATE','공유 중인 후보만 종료할 수 있습니다.',409);

@@ -196,7 +196,7 @@ export function ideaHistory(
     actorId: c.uid,
     createdAt: c.now,
     revision: i.revision,
-    snapshot: { title: i.title, body: i.body, scope: i.scope, state: i.state, ...(i.refinement?{refinement:i.refinement}:{}) },
+    snapshot: { title: i.title, body: i.body, scope: i.scope, state: i.state, ...(i.authorName!==undefined?{authorName:i.authorName}:{}), ...(i.refinement?{refinement:i.refinement}:{}) },
   });
 }
 export async function defaults(c: Context, id: string) {

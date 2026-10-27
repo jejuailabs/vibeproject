@@ -91,20 +91,20 @@ export function ProblemCard({ value, member, mine, origin, compact, badge, autho
 }
 
 /** Live preview of how the card being written appears on the team wall for the current step. */
-export function CardPreview({ phase, member, title, body, refinement }: { phase: "thought" | "questions" | "definition"; member?: Member; title: string; body?: string; refinement?: Refinement }) {
+export function CardPreview({ phase, member, title, body, refinement, author }: { phase: "thought" | "questions" | "definition"; member?: Member; title: string; body?: string; refinement?: Refinement; author?: string }) {
   const answers = refinement ? questionFields.filter(([k]) => refinement.answers[k].trim()) : [];
   if (phase === "definition" && refinement && sentenceReady(refinement))
     return (
       <section className="card-preview" aria-label="팀 벽 미리보기">
         <span className="card-preview-label"><Eye size={13} /> 보드에 이렇게 전시돼요</span>
-        <ProblemCard value={refinement} member={member} mine origin={title} compact />
+        <ProblemCard value={refinement} member={member} mine={!author} author={author} origin={title} compact />
       </section>
     );
   return (
     <section className="card-preview" aria-label="팀 벽 미리보기">
       <span className="card-preview-label"><Eye size={13} /> 팀 벽에 이렇게 보여요</span>
       <article className="steps-card mine">
-        <header><img className="steps-avatar" src={characterFor(member).image} alt="" /><span><strong>{member?.name || "나"}</strong><small>{title.trim() || "제목을 적으면 여기에 보여요"}</small></span></header>
+        <header><img className="steps-avatar" src={characterFor(member).image} alt="" /><span><strong>{author || member?.name || "나"}</strong><small>{title.trim() || "제목을 적으면 여기에 보여요"}</small></span></header>
         {phase === "thought" && <p className={body?.trim() ? "" : "steps-muted"}>{body?.trim() || "겪은 일을 적으면 여기에 보여요."}</p>}
         {phase === "questions" && (answers.length ? (
           <dl>{answers.map(([k, label]) => <div key={k}><dt>{label}</dt><dd>{refinement!.answers[k]}</dd></div>)}</dl>
