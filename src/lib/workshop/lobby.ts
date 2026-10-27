@@ -246,6 +246,56 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "리더가 함께 풀 문제 투표를 열었습니다.", p.id, "project");
       return { id, records: [openedVote] };
     }
+    case "editTeamVote": {
+      const p = await project(c, cmd.projectId, "leader");
+      const vote = await teamVote(c, p.id, cmd.voteId);
+      if (!vote || vote.data.state === "deleted") fail("수정할 투표가 없습니다.");
+      if ((vote.data.settingsRevision || 0) !== cmd.settingsRevision)
+        fail("투표 설정이 먼저 변경되었습니다. 수정 창을 다시 열어 최신 내용을 확인해주세요.");
+      const changingRules = cmd.candidateIds !== undefined || cmd.maxVotes !== undefined || cmd.minutes !== undefined;
+      if (changingRules && (vote.data.state !== "open" || (vote.data.endsAt && vote.data.endsAt <= c.now)))
+        fail("마감되거나 취소된 투표는 이름만 수정할 수 있습니다.");
+      const candidateIds = cmd.candidateIds ?? vote.data.candidateIds;
+      if (new Set(candidateIds).size !== candidateIds.length) fail("후보가 중복되었습니다.");
+      const added = candidateIds.filter((id) => !vote.data.candidateIds.includes(id));
+      if (added.length) {
+        const ready = await voteCards(c, p);
+        if (added.some((id) => !ready.some((i) => i.id === id))) fail("완성된 문제 카드만 투표 후보로 고를 수 있습니다.");
+      }
+      const maxVotes = Math.min(cmd.maxVotes ?? vote.data.maxVotes ?? 1, candidateIds.length);
+      const removed = vote.data.candidateIds.filter((id) => !candidateIds.includes(id));
+      let counts = { ...vote.data.counts }, voters = vote.data.voters;
+      const changedBallots: RecordOf<"teamBallot">[] = [];
+      if (removed.length || maxVotes < (vote.data.maxVotes || 1)) {
+        const ballots = (await c.store.list<RecordOf<"teamBallot">>(path(c, "workshop"), [
+          { field: "kind", value: "teamBallot" }, { field: "projectId", value: p.id },
+        ])).filter((b) => b.data.round === vote.data.round &&
+          (b.data.voteId === vote.id || (!b.data.voteId && vote.id === "teamvote-" + p.id)));
+        const kept = ballots.map((ballot) => ({ ballot,
+          picks: (ballot.data.ideaIds ?? (ballot.data.ideaId ? [ballot.data.ideaId] : [])).filter((id) => candidateIds.includes(id)),
+        }));
+        if (kept.some(({ picks }) => picks.length > maxVotes))
+          fail("이미 새 한도보다 많이 고른 참가자가 있습니다. 기존 선택을 유지할 수 있도록 1인당 표 수를 늘려주세요.");
+        if (removed.length) {
+          counts = {}; voters = 0;
+          for (const { ballot, picks } of kept) {
+            if (picks.length) voters++;
+            for (const id of picks) counts[id] = (counts[id] || 0) + 1;
+            const before = ballot.data.ideaIds ?? (ballot.data.ideaId ? [ballot.data.ideaId] : []);
+            if (before.length !== picks.length) changedBallots.push(write(c, ballot.id, "teamBallot",
+              { round: vote.data.round, voteId: vote.id, ideaIds: picks }, "project", p.id, ballot.ownerId, ballot));
+          }
+        }
+      }
+      const endsAt = cmd.minutes === undefined ? vote.data.endsAt ?? null
+        : cmd.minutes === 0 ? null : new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString();
+      const updatedVote = write(c, vote.id, "teamVote", { ...vote.data, title: cmd.title,
+        candidateIds, maxVotes, endsAt, counts, voters, settingsRevision: cmd.settingsRevision + 1,
+      }, "project", p.id, vote.ownerId, vote);
+      event(c, "투표 수정", cmd.title || "문제 선정 투표", p.id, p.id);
+      // Other people's ballots stay private; they receive their updated ballot on their next poll.
+      return { id: p.id, records: [updatedVote, ...changedBallots.filter((b) => b.ownerId === c.uid)] };
+    }
     case "castTeamVote": {
       const p = await project(c, cmd.projectId);
       const vote = await teamVote(c, p.id, cmd.voteId);
@@ -282,7 +332,7 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       if (cmd.ideaIds?.some((id) => !fresh.includes(id))) fail("후보가 아닌 완성된 문제 카드만 추가할 수 있습니다.");
       const added = cmd.ideaIds ? fresh.filter((id) => cmd.ideaIds!.includes(id)) : fresh;
       if (!added.length) fail("새로 추가할 완성된 문제 카드가 없습니다.");
-      const updatedVote = write(c, vote.id, "teamVote", { ...vote.data, candidateIds: [...vote.data.candidateIds, ...added] }, "project", p.id, vote.ownerId, vote);
+      const updatedVote = write(c, vote.id, "teamVote", { ...vote.data, candidateIds: [...vote.data.candidateIds, ...added], settingsRevision: (vote.data.settingsRevision || 0) + 1 }, "project", p.id, vote.ownerId, vote);
       event(c, "투표 후보 추가", "문제 카드 " + added.length + "개", p.id, p.id);
       return { id: p.id, records: [updatedVote] };
     }

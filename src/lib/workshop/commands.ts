@@ -156,6 +156,11 @@ export const workshopCommand = z.discriminatedUnion("type", [
     reason,
   }),
   S({ type: z.literal("openTeamVote"), ...project, title: z.string().trim().max(80).optional(), maxVotes: z.number().int().min(1).max(10).optional(), candidateIds: z.array(id).min(1).max(100).optional(), minutes: voteMinutes }),
+  S({ type: z.literal("editTeamVote"), ...project, voteId: id, settingsRevision: revision,
+    title: z.string().trim().max(80), candidateIds: z.array(id).min(1).max(100).optional(),
+    maxVotes: z.number().int().min(1).max(10).optional(),
+    // Omitted keeps the exact deadline; zero removes it; positive values run from the save time.
+    minutes: z.number().int().min(0).max(72 * 60).optional() }),
   S({ type: z.literal("castTeamVote"), ...project, voteId: id.optional(), ideaId: id }),
   S({ type: z.literal("closeTeamVote"), ...project, voteId: id.optional() }),
   S({ type: z.literal("refreshTeamVote"), ...project, voteId: id.optional(), ideaIds: z.array(id).min(1).max(100).optional() }),

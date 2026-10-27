@@ -9,7 +9,7 @@ import { answered, definitionFields, questionFields, statement } from "@/lib/ref
 import { docKeys, docNames, type DocKey } from "@/lib/workshop/model";
 import { teamVoteTitle } from "@/lib/workshop/vote-title";
 import { projectOriginLabel, projectVisibilityLabel } from "@/lib/workshop/project-info";
-import type { WorkshopRecord } from "@/lib/workshop/model";
+import type { RecordOf, WorkshopRecord } from "@/lib/workshop/model";
 import { VoteShareButton } from "./workshop/vote-share-button";
 import { ProjectDeleteButton } from "./workshop/project-delete-button";
 import { ProjectEditAction } from "./workshop/project-edit-action";
@@ -53,7 +53,7 @@ type StepsProps = Props & {
 };
 
 const actionLabels: Record<string, string> = {
-  openTeamVote: "투표를 여는 중…", refreshTeamVote: "후보를 추가하는 중…", closeTeamVote: "투표를 마감하는 중…",
+  openTeamVote: "투표를 여는 중…", editTeamVote: "투표를 수정하는 중…", refreshTeamVote: "후보를 추가하는 중…", closeTeamVote: "투표를 마감하는 중…",
   cancelTeamVote: "투표를 취소하는 중…", deleteTeamVote: "투표를 삭제하는 중…",
   openPathVote: "팀·개별 투표를 여는 중…", closePathVote: "팀·개별 투표를 마감하는 중…",
   openJoinBoard: "참가 받기를 여는 중…", closeJoinBoard: "프로젝트 만드는 중…", confirmProblem: "문제를 확정하는 중…",
@@ -243,6 +243,25 @@ export function ProjectSteps(p: StepsProps) {
   const [picking, setPicking] = useState(false), [chosen, setChosen] = useState<string[]>([]), [voteName, setVoteName] = useState(""), pickerRef = useRef<HTMLDialogElement>(null);
   const picked = problems.filter((i) => chosen.includes(i.id));
   useEffect(() => { const d = pickerRef.current; if (!d) return; if (picking && !d.open) d.showModal(); else if (!picking && d.open) d.close(); }, [picking]);
+  const [editingVote, setEditingVote] = useState<RecordOf<"teamVote"> | null>(null), editVoteRef = useRef<HTMLDialogElement>(null);
+  const [editVoteName, setEditVoteName] = useState(""), [editCandidates, setEditCandidates] = useState<string[]>([]);
+  const [editLimit, setEditLimit] = useState(1), [editMinutes, setEditMinutes] = useState("keep");
+  const editRules = editingVote?.data.state === "open" && !timeUp(editingVote);
+  const editOptions = [...new Set([...(editingVote?.data.candidateIds || []), ...problems.map((i) => i.id)])];
+  useEffect(() => { const d = editVoteRef.current; if (!d) return; if (editingVote && !d.open) d.showModal(); else if (!editingVote && d.open) d.close(); }, [editingVote]);
+  function startVoteEdit(room: RecordOf<"teamVote">) {
+    setEditVoteName(room.data.title || ""); setEditCandidates([...room.data.candidateIds]);
+    setEditLimit(room.data.maxVotes || 1); setEditMinutes("keep"); setEditingVote(room);
+  }
+  async function saveVoteEdit(e: FormEvent) {
+    e.preventDefault();
+    if (!editingVote) return;
+    if (await p.run({ type: "editTeamVote", projectId: team.id, voteId: editingVote.id,
+      settingsRevision: editingVote.data.settingsRevision || 0, title: editVoteName.trim(),
+      ...(editRules ? { candidateIds: editCandidates, maxVotes: Math.min(editLimit, editCandidates.length),
+        ...(editMinutes !== "keep" ? { minutes: Number(editMinutes) } : {}) } : {}),
+    })) setEditingVote(null);
+  }
   // Live vote dashboard, only for the person who opened that vote.
   const [dashId, setDashId] = useState<string | null>(null), dashRef = useRef<HTMLDialogElement>(null);
   const dash = votes.find((v) => v.id === dashId && v.ownerId === me.id);
@@ -509,6 +528,7 @@ export function ProjectSteps(p: StepsProps) {
               <div className="vote-card-actions">
                 <button type="button" className="primary-button" onClick={() => openVoteBoard(room.id)}>{room.data.state === "open" ? "투표하러 가기" : "카드·결과 보기"} <ArrowRight size={15} /></button>
                 <VoteShareButton cohortId={w.cohort.id} projectId={team.id} voteId={room.id} />
+                {(leader || me.role === "admin") && !ended && <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startVoteEdit(room)}><Pencil size={14} /> 투표 수정</button>}
                 {room.ownerId === me.id && room.data.state !== "cancelled" && <button type="button" className="secondary-button" onClick={() => setDashId(room.id)}><BarChart3 size={14} /> 대시보드</button>}
                 {room.data.state === "closed" && (() => {
                   const pv = pathOf(room.id);
@@ -588,6 +608,7 @@ export function ProjectSteps(p: StepsProps) {
                   </div>
             )}
           </div>
+          {vote && (leader || me.role === "admin") && !ended && <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startVoteEdit(vote)}><Pencil size={14} /> 투표 수정</button>}
           <form onSubmit={confirm}>
             <div className="vote-tiles">
               {boardProblems.map((i, n) => {
@@ -690,6 +711,44 @@ export function ProjectSteps(p: StepsProps) {
         {index > 0 && <button className="secondary-button" onClick={() => setStep(steps[index - 1].key)}>이전 · {steps[index - 1].name}</button>}
         {index < steps.length - 1 && <button className="primary-button" onClick={() => setStep(steps[index + 1].key)}>다음 · {steps[index + 1].name} <ArrowRight size={15} /></button>}
       </div>
+
+      <dialog ref={editVoteRef} className="modal vote-picker vote-editor" aria-label="투표 수정" onCancel={() => setEditingVote(null)} onClose={() => setEditingVote(null)} onClick={(e) => { if (e.target === e.currentTarget) setEditingVote(null); }}>
+        {editingVote && <form onSubmit={saveVoteEdit}>
+          <div className="vote-detail-head">
+            <div><h3>투표 수정</h3><small>{editRules ? "기존 표는 유지돼요. 후보를 빼면 그 후보에 들어간 표만 취소돼요." : "마감·취소된 투표는 이름을 수정할 수 있어요. 결과는 그대로 유지돼요."}</small></div>
+            <button type="button" className="icon-button" aria-label="닫기" onClick={() => setEditingVote(null)}><X size={20} /></button>
+          </div>
+          <ActionFeedback {...p} />
+          <label className="vote-name">투표 이름 <span>(선택)</span>
+            <input aria-label="수정할 투표 이름" value={editVoteName} onChange={(e) => setEditVoteName(e.target.value)} maxLength={80} disabled={p.busy} placeholder="예: 이번 주에 만들 프로젝트 고르기" />
+            <small>비워두면 후보 카드 이름으로 표시돼요.</small>
+          </label>
+          {editRules && <>
+            <div className="vote-picker-bar">
+              <span><b>{editCandidates.length}</b>/{editOptions.length}장 선택</span>
+              <button type="button" className="text-button" disabled={p.busy || editCandidates.length === editOptions.length} onClick={() => setEditCandidates(editOptions)}>전체 선택</button>
+              <button type="button" className="text-button" disabled={p.busy || !editCandidates.length} onClick={() => setEditCandidates([])}>전체 해제</button>
+            </div>
+            <ul className="vote-picker-list">
+              {editOptions.map((id) => <li key={id}><label><input type="checkbox" checked={editCandidates.includes(id)} disabled={p.busy} onChange={(e) => setEditCandidates((ids) => e.target.checked ? [...ids, id] : ids.filter((x) => x !== id))} /> <span>{cards.find((i) => i.id === id)?.title || "내용을 볼 수 없는 기존 후보"}</span></label></li>)}
+            </ul>
+            {editingVote.data.candidateIds.some((id) => !editCandidates.includes(id)) && <p className="vote-edit-note" role="status">빼는 후보에 들어간 표는 취소됩니다. 나머지 후보의 표와 선택은 유지됩니다.</p>}
+            <p className="vote-edit-note">현재 마감: {editingVote.data.endsAt ? new Date(editingVote.data.endsAt).toLocaleString("ko-KR") : "시간 제한 없음"}. 새 시간을 고르면 저장한 시각부터 계산해요.</p>
+          </>}
+          <div className="vote-detail-actions">
+            {editRules && <>
+              <label>마감 시간 <select aria-label="수정할 투표 시간" value={editMinutes} onChange={(e) => setEditMinutes(e.target.value)} disabled={p.busy}>
+                <option value="keep">현재 마감 유지</option>{voteTimes.map((m) => <option key={m} value={m}>{voteTimeLabel(m)}</option>)}
+              </select></label>
+              <label>한 사람당 <select aria-label="수정할 한 사람당 투표 수" value={Math.min(editLimit, Math.max(1, editCandidates.length))} onChange={(e) => setEditLimit(Number(e.target.value))} disabled={p.busy || !editCandidates.length}>
+                {Array.from({ length: Math.max(1, Math.min(10, editCandidates.length)) }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}표</option>)}
+              </select></label>
+            </>}
+            <button type="button" className="secondary-button" onClick={() => setEditingVote(null)}>취소</button>
+            <button type="submit" className="primary-button" disabled={p.busy || (editRules && !editCandidates.length)}><Check size={15} /> 수정 저장</button>
+          </div>
+        </form>}
+      </dialog>
 
       {/* New vote: pick which finished cards go on the ballot. */}
       <dialog ref={pickerRef} className="modal vote-picker" aria-label="투표 후보 고르기" onCancel={() => setPicking(false)} onClose={() => setPicking(false)} onClick={(e) => { if (e.target === e.currentTarget) setPicking(false); }}>

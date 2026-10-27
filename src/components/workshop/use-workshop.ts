@@ -16,7 +16,7 @@ import { baselineArchive } from "@/lib/workshop/export";
 import { basicCard, basicCoach, basicDraft, type CardInput, type CardReply, type CoachInput, type CoachReply, type DraftInput, type DraftReply } from "@/lib/coaching";
 // These commands return the changed records without changing workspace cards,
 // membership or projects. Events and notifications arrive on the next poll.
-const recordOnlyCommands = new Set(["castTeamVote", "openTeamVote", "refreshTeamVote", "cancelTeamVote", "deleteTeamVote",
+const recordOnlyCommands = new Set(["castTeamVote", "openTeamVote", "editTeamVote", "refreshTeamVote", "cancelTeamVote", "deleteTeamVote",
   "closeTeamVote", "openPathVote", "pickPath", "closePathVote", "openJoinBoard", "pickJoin"]);
 export function useWorkshop({
   data,

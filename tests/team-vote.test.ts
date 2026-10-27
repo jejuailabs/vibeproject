@@ -21,6 +21,99 @@ function responseRecord<K extends 'teamVote'|'pathVote'|'joinBoard'>(s:State,kin
  return saved;
 }
 
+function editableVoteState():State {
+ const workspace=previewWorkspace();
+ for(const id of ['edit-a','edit-b','edit-c']) workspace.ideas.push({...structuredClone(workspace.ideas.find(i=>i.id==='i1')!),id,ownerId:'jun',projectId:'p-onboarding',scope:'project'});
+ return {workspace,records:[]};
+}
+function editVote(s:State,patch:Record<string,unknown>={}) {
+ return {type:'editTeamVote',projectId:'p-onboarding',voteId:vote(s).id,settingsRevision:vote(s).data.settingsRevision||0,title:'수정한 투표',...patch};
+}
+
+test('editing vote settings preserves concurrent ballots, exact deadlines, and other rooms',async()=>{
+ let s=await run(editableVoteState(),'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['edit-c']});
+ const other=structuredClone(vote(s));
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['edit-a','edit-b'],minutes:4320});
+ const captured=editVote(s,{candidateIds:['edit-a','edit-b','edit-c'],maxVotes:2});
+ const deadline=vote(s).data.endsAt;
+ s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'edit-a'});
+ // A ballot arriving after the editor opened must survive, without a settings conflict.
+ s=await run(s,'jun',captured);
+ const updated=responseRecord(s,'teamVote',vote(s).id);
+ assert.equal(updated.data.title,'수정한 투표');assert.equal(updated.data.maxVotes,2);
+ assert.equal(updated.data.endsAt,deadline);assert.equal(updated.data.counts['edit-a'],1);assert.equal(updated.data.voters,1);
+ assert.deepEqual(s.records.find(r=>r.id===other.id),other);
+ await assert.rejects(run(s,'jun',captured),/설정이 먼저 변경/);
+ s=await run(s,'jun',editVote(s,{minutes:720}));
+ assert.equal(Date.parse(vote(s).data.endsAt!)-Date.parse(vote(s).updatedAt),720*60000);
+ s=await run(s,'jun',editVote(s,{minutes:0,title:''}));
+ assert.equal(vote(s).data.endsAt,null);assert.equal(vote(s).data.title,'');
+});
+
+test('removing a vote candidate cancels only its selections, keeps privacy, and permits voting again',async()=>{
+ let s=await run(editableVoteState(),'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['edit-a','edit-b','edit-c'],maxVotes:2});
+ for(const [uid,ideaId] of [['jun','edit-a'],['jun','edit-b'],['seo','edit-a']] as const)
+  s=await run(s,uid,{type:'castTeamVote',projectId:'p-onboarding',ideaId});
+ s=await run(s,'jun',editVote(s,{candidateIds:['edit-b','edit-c'],maxVotes:1}));
+ assert.deepEqual(vote(s).data.counts,{'edit-b':1});assert.equal(vote(s).data.voters,1);
+ const ballots=s.records.filter((r):r is RecordOf<'teamBallot'>=>r.kind==='teamBallot');
+ assert.deepEqual(ballots.find(b=>b.ownerId==='jun')!.data.ideaIds,['edit-b']);
+ assert.deepEqual(ballots.find(b=>b.ownerId==='seo')!.data.ideaIds,[]);
+ const response=s.result as {records:WorkshopRecord[]};
+ assert.equal(response.records.length,2);assert.equal(response.records[1].ownerId,'jun');
+ assert.equal(response.records.some(r=>r.kind==='teamBallot'&&r.ownerId==='seo'),false);
+ s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'edit-c'});
+ assert.deepEqual(vote(s).data.counts,{'edit-b':1,'edit-c':1});assert.equal(vote(s).data.voters,2);
+ await assert.rejects(run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'edit-a'}),/후보/);
+});
+
+test('editing refuses unauthorized, foreign, duplicate, unfinished and conflicting settings without losing votes',async()=>{
+ let s=await run(editableVoteState(),'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['edit-a','edit-b'],maxVotes:2});
+ for(const ideaId of ['edit-a','edit-b']) s=await run(s,'seo',{type:'castTeamVote',projectId:'p-onboarding',ideaId});
+ const before=structuredClone(s);
+ await assert.rejects(run(s,'seo',editVote(s)),/팀장/);
+ await assert.rejects(run(s,'jun',editVote(s,{maxVotes:1})),/새 한도보다 많이/);
+ await assert.rejects(run(s,'jun',editVote(s,{candidateIds:['edit-a','edit-a']})),/중복/);
+ await assert.rejects(run(s,'jun',editVote(s,{candidateIds:['edit-a','i3']})),/완성된 문제 카드만/);
+ await assert.rejects(run(s,'min',editVote(s,{projectId:'p-space'})),/이 프로젝트의 투표방/);
+ for(const patch of [{candidateIds:[]},{minutes:4321},{minutes:-1},{maxVotes:0}]) await assert.rejects(run(s,'jun',editVote(s,patch)));
+ assert.deepEqual(s,before);
+ const captured=editVote(s);
+ s=await run(s,'jun',{type:'refreshTeamVote',projectId:'p-onboarding',ideaIds:['edit-c']});
+ await assert.rejects(run(s,'jun',captured),/설정이 먼저 변경/);
+ s=await run(s,'min',editVote(s,{title:'관리자가 수정한 투표'}));
+ assert.equal(vote(s).data.title,'관리자가 수정한 투표');
+});
+
+test('closed and cancelled votes allow title edits while their results and downstream choices remain intact',async()=>{
+ let s=await run(editableVoteState(),'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['edit-a']});
+ s=await run(s,'jun',{type:'castTeamVote',projectId:'p-onboarding',ideaId:'edit-a'});
+ s=await run(s,'jun',{type:'closeTeamVote',projectId:'p-onboarding'});
+ s=await run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId:vote(s).id});
+ const before=structuredClone(vote(s).data),path=structuredClone(s.records.find(r=>r.kind==='pathVote'));
+ s=await run(s,'jun',editVote(s));
+ assert.deepEqual(vote(s).data,{...before,title:'수정한 투표',settingsRevision:1});
+ assert.deepEqual(s.records.find(r=>r.kind==='pathVote'),path);
+ await assert.rejects(run(s,'jun',editVote(s,{candidateIds:['edit-a','edit-b']})),/이름만 수정/);
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['edit-b']});
+ s=await run(s,'jun',{type:'cancelTeamVote',projectId:'p-onboarding'});
+ s=await run(s,'jun',editVote(s));assert.equal(vote(s).data.state,'cancelled');
+ await assert.rejects(run(s,'jun',editVote(s,{minutes:10})),/이름만 수정/);
+ s=await run(s,'jun',{type:'deleteTeamVote',projectId:'p-onboarding'});
+ await assert.rejects(run(s,'jun',editVote(s)),/수정할 투표가 없습니다/);
+});
+
+test('legacy single-choice ballots are cleaned when their candidate is removed',async()=>{
+ const s=editableVoteState(),now=new Date().toISOString();
+ s.records.push({id:'teamvote-p-onboarding',kind:'teamVote',scope:'project',projectId:'p-onboarding',ownerId:'jun',revision:1,createdAt:now,updatedAt:now,
+  data:{round:1,state:'open',candidateIds:['edit-a','edit-b'],counts:{'edit-a':1},voters:1,openedAt:now,closedAt:null}},
+ {id:'teamballot-p-onboarding-seo',kind:'teamBallot',scope:'project',projectId:'p-onboarding',ownerId:'seo',revision:1,createdAt:now,updatedAt:now,data:{round:1,ideaId:'edit-a'}});
+ const changed=await run(s,'jun',editVote(s,{candidateIds:['edit-b']}));
+ assert.deepEqual(vote(changed).data.counts,{});assert.equal(vote(changed).data.voters,0);
+ assert.deepEqual((changed.records.find(r=>r.kind==='teamBallot') as RecordOf<'teamBallot'>).data,{round:1,voteId:'teamvote-p-onboarding',ideaIds:[]});
+ assert.equal((changed.result as {records:WorkshopRecord[]}).records.length,1);
+});
+
 test('the leader opens a vote on problem cards, members vote once each and may change it, then the leader closes it',async()=>{
  const w=previewWorkspace();
  // jun leads p-onboarding; give the team a refined card from seo.

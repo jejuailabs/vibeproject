@@ -452,3 +452,10 @@
 .vote-picker-list input{width:17px;height:17px;flex:none;accent-color:#6f45b4}
 .vote-picker .vote-detail-actions label{font-size:12px;color:#6f6480;display:flex;align-items:center;gap:6px;margin-right:auto}
 .vote-picker .vote-detail-actions select{border:1px solid #e1d8eb;border-radius:8px;padding:6px 8px;background:#fff;color:#3e3249;color-scheme:light}
+.vote-edit-note{font-size:13px;line-height:1.6;color:#6f6480;overflow-wrap:anywhere}
+.vote-editor :is(.vote-name,.vote-picker-list label span,.icon-button){color:#3e3249}
+@media(min-width:751px){
+  .vote-editor .vote-detail-actions{display:flex;flex-wrap:wrap;gap:12px}
+  .vote-editor .vote-detail-actions label{flex:1 1 42%;margin:0;white-space:nowrap}
+  .vote-editor .vote-detail-actions select{flex:1;min-width:0}
+}
