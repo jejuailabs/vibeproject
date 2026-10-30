@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {previewWorkspace} from '../src/lib/preview';
 import {previewWorkshop} from '../src/lib/workshop/memory';
+import {readVoteLink, voteShareUrl} from '../src/lib/workshop/vote-link';
 import type {PreviewState, RecordOf, WorkshopRecord} from '../src/lib/workshop/model';
 
 type State=PreviewState&{result?:unknown};
@@ -337,6 +338,15 @@ test('the leader keeps the cards ranked 1st to N as final teams and members join
  assert.deepEqual(Object.keys(made),['f2']);
  const p2=s.workspace.projects.find(p=>p.id===made.f2)!;
  assert.deepEqual([p2.leaderId,[...p2.memberIds].sort()],['jun',['jun','seo']]);
+});
+
+test('a join-board link carries the board and reads back, while plain vote links stay unchanged',()=>{
+ const target={cohortId:'c1',projectId:'p1',voteId:'v1'};
+ const plain=voteShareUrl('https://x.test/app?invite=secret',target);
+ assert.equal(plain,'https://x.test/app?cohort=c1&project=p1&vote=v1');
+ assert.deepEqual(readVoteLink(plain),target);
+ const board=voteShareUrl('https://x.test/app',{...target,boardId:'joinboard-v1'});
+ assert.deepEqual(readVoteLink(board),{...target,boardId:'joinboard-v1'});
 });
 
 test('undoing an assignment removes its projects and lets the leader assign the vote again',async()=>{

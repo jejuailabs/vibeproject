@@ -170,7 +170,13 @@ test('after a vote closes, the leader keeps the top cards as final teams and mem
   const board = page.getByRole('dialog', { name: '선정 프로젝트', exact: true });
   const cardOf = (title: RegExp) => board.locator('.join-card').filter({ has: page.getByRole('heading', { name: title }) });
   await expect(board.locator('.join-card')).toHaveCount(1);
-  await expect(cardOf(/준의 모임 문제/)).toContainText('1등');
+  await expect(board.locator('.join-tag')).toHaveCount(0);
+  await expect(board).not.toContainText('1등');
+  // A QR code on the board links straight back to it.
+  await board.getByRole('button', { name: 'QR 코드로 참여', exact: true }).click();
+  await expect(board.getByLabel('이 참여 화면으로 바로 오는 QR 코드')).toBeVisible();
+  await expect(board.getByLabel('참여 화면 링크')).toHaveValue(/[?&]vote=[^&]+.*&board=joinboard-/);
+  await page.screenshot({ path: 'work/team-vote-join-qr.png' });
   await board.getByRole('button', { name: '닫기', exact: true }).click();
 
   // A member joins the team; the list shows how many are in and who.

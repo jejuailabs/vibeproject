@@ -11,7 +11,7 @@ import { docKeys, docNames, type DocKey } from "@/lib/workshop/model";
 import { teamVoteTitle } from "@/lib/workshop/vote-title";
 import { projectOriginLabel, projectVisibilityLabel } from "@/lib/workshop/project-info";
 import type { RecordOf, WorkshopRecord } from "@/lib/workshop/model";
-import { VoteShareButton } from "./workshop/vote-share-button";
+import { JoinBoardQr, VoteShareButton } from "./workshop/vote-share-button";
 import { ProjectDeleteButton } from "./workshop/project-delete-button";
 import { ProjectEditAction } from "./workshop/project-edit-action";
 import { recordsOf, type Props } from "./workshop/common";
@@ -45,6 +45,8 @@ type StepsProps = Props & {
   onNavigate: (tab: string, doc?: DocKey, target?: string) => void;
   initialStep?: StepKey;
   initialVoteId?: string;
+  // From a join-board QR code: opens that board instead of the vote's cards.
+  initialBoardId?: string;
   recordsReady?: boolean;
   pendingAction?: string;
   actionError?: string;
@@ -121,19 +123,6 @@ export function ProjectSteps(p: StepsProps) {
   const [voteLinkError, setVoteLinkError] = useState("");
   useEffect(() => { if (step !== "confirm") setVoteBoard(false); }, [step]);
   useEffect(() => { if (selectedVoteId && !vote) { setSelectedVoteId(null); setVoteBoard(false); } }, [selectedVoteId, vote]);
-  useEffect(() => {
-    if (!p.initialVoteId || handledVoteLink.current === p.initialVoteId || p.recordsReady === false) return;
-    handledVoteLink.current = p.initialVoteId;
-    setStep("confirm");
-    setVoteLinkError("");
-    if (votes.some((room) => room.id === p.initialVoteId)) {
-      setSelectedVoteId(p.initialVoteId);
-      setVoteBoard(true);
-    } else {
-      setVoteLinkError("이 투표는 삭제되었거나 더 이상 볼 수 없어요.");
-    }
-  }, [p.initialVoteId, p.recordsReady, votes]);
-
   const myBallot = vote && recordsOf(p, "teamBallot").find((x) => x.projectId === team.id && x.ownerId === me.id && x.data.round === vote.data.round && (x.data.voteId === vote.id || (!x.data.voteId && vote.id === "teamvote-" + team.id)));
   const savedPicks = myBallot ? myBallot.data.ideaIds ?? (myBallot.data.ideaId ? [myBallot.data.ideaId] : []) : [];
   const voteQueue = p.voteQueue;
@@ -288,6 +277,21 @@ export function ProjectSteps(p: StepsProps) {
   const boardView = boards.find((x) => x.id === boardId);
   useEffect(() => { const d = boardRef.current; if (!d) return; if (boardView && !d.open) d.showModal(); else if (!boardView && d.open) d.close(); }, [boardView]);
   const [boardCap, setBoardCap] = useState(5), [boardMinutes, setBoardMinutes] = useState(10);
+  // A shared link opens its vote; a join-board QR link opens that board straight away.
+  useEffect(() => {
+    if (!p.initialVoteId || handledVoteLink.current === p.initialVoteId || p.recordsReady === false) return;
+    handledVoteLink.current = p.initialVoteId;
+    setStep("confirm");
+    setVoteLinkError("");
+    if (p.initialBoardId && boards.some((b) => b.id === p.initialBoardId && b.data.voteId === p.initialVoteId)) {
+      setBoardId(p.initialBoardId);
+    } else if (votes.some((room) => room.id === p.initialVoteId)) {
+      setSelectedVoteId(p.initialVoteId);
+      setVoteBoard(true);
+    } else {
+      setVoteLinkError("이 투표는 삭제되었거나 더 이상 볼 수 없어요.");
+    }
+  }, [p.initialVoteId, p.initialBoardId, p.recordsReady, votes, boards]);
   // Undo takes the vote back to just after it closed; projects the assignment made are removed.
   function revertAssignment(v: RecordOf<"teamVote">, made: number) {
     if (window.confirm("‘" + teamVoteTitle(v.data, cards) + "’ 배정을 되돌릴까요? 팀·개별 결과와 참가 명단이 사라지고" + (made ? ", 이 배정으로 만들어진 프로젝트 " + made + "개도 삭제돼요" : "") + ". 되돌린 뒤 다시 배정할 수 있어요."))
@@ -882,9 +886,10 @@ export function ProjectSteps(p: StepsProps) {
               <header className="vote-dash-head">
                 <div>
                   <span>{teamVoteTitle(votes.find((v) => v.id === d.voteId)?.data, cards)} · {live ? (d.endsAt ? "남은 시간 " + clock(Date.parse(d.endsAt) - now) : "시간 제한 없음") : d.state === "open" ? "시간 종료 · 결과를 모으고 있어요" : "참가 마감"} · 정원 {d.capacity}명</span>
-                  <h2>{d.state === "closed" ? "프로젝트 배정 결과" : d.topRank ? "최종 팀 · " + d.topRank + "등까지" : "선정 프로젝트"}</h2>
+                  <h2>{d.state === "closed" ? "프로젝트 배정 결과" : d.topRank ? "최종 팀" : "선정 프로젝트"}</h2>
                   {live && <small>{amSolo ? "개별로 골라서 내 프로젝트에 참가해 있어요." : (d.topRank ? "들어갈 팀을 하나 골라요." : "참가할 프로젝트를 하나 골라요.") + " 마감 전까지는 바꿀 수 있어요."} · 지금 {Object.keys(d.picks).length}/{members.length}명 들어감</small>}
                   {live && <p className="join-creation-notice">{d.endsAt ? "시간이 끝나면 참가자가 있는 항목마다 프로젝트가 자동 생성됩니다." : "리더가 참가 접수를 마감하면 참가자가 있는 항목마다 프로젝트가 생성됩니다."} 카드 작성자가 참가하면 리더가 되고, 참가하지 않으면 가장 먼저 참가한 사람이 리더가 됩니다.</p>}
+                  {live && <JoinBoardQr cohortId={w.cohort.id} projectId={team.id} voteId={d.voteId} boardId={boardView.id} />}
                 </div>
                 <button type="button" className="icon-button" aria-label="닫기" onClick={() => setBoardId(null)}><X size={22} /></button>
               </header>
@@ -893,7 +898,7 @@ export function ProjectSteps(p: StepsProps) {
                   const joined = joinedTo(o.ideaId), full = joined.length >= d.capacity, here = mine === o.ideaId, made = d.projects?.[o.ideaId];
                   return (
                     <article key={o.ideaId} className={"join-card" + (here ? " here" : "")} style={{ ["--accent" as string]: accents[k % accents.length] }}>
-                      <span className="join-tag">{o.rank ? o.rank + "등" : "개별"}{o.soloNick ? " · " + o.soloNick + "의 프로젝트" : ""}</span>
+                      {o.soloNick && <span className="join-tag">개별 · {o.soloNick}의 프로젝트</span>}
                       <h3>{o.title}</h3>
                       <p>{o.problem}</p>
                       <div className="join-people"><b>{joined.length}/{d.capacity}명</b>{joined.map((uid) => <span key={uid}>{nameOn(boardView, uid)}</span>)}</div>
