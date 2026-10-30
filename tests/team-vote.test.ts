@@ -327,7 +327,7 @@ test('the leader keeps the cards ranked 1st to N as final teams and members join
  // Tied cards share 2nd place, so both stay; the card with no votes is left out.
  assert.deepEqual(jb().data.options.map(o=>[o.ideaId,o.rank]),[['f1',1],['f2',2],['f3',2]]);
  assert.deepEqual([jb().data.pathId,jb().data.topRank,jb().data.picks],['',2,{}]);
- await assert.rejects(run(s,'jun',{type:'openFinalBoard',projectId:'p-onboarding',voteId,topRank:1,capacity:2}),/이미 정했/);
+ await assert.rejects(run(s,'jun',{type:'openFinalBoard',projectId:'p-onboarding',voteId,topRank:1,capacity:2}),/이미 배정/);
  await assert.rejects(run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId}),/최종 팀/);
  s=await run(s,'seo',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'f2'});
  s=await run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'f2'});
@@ -337,6 +337,40 @@ test('the leader keeps the cards ranked 1st to N as final teams and members join
  assert.deepEqual(Object.keys(made),['f2']);
  const p2=s.workspace.projects.find(p=>p.id===made.f2)!;
  assert.deepEqual([p2.leaderId,[...p2.memberIds].sort()],['jun',['jun','seo']]);
+});
+
+test('undoing an assignment removes its projects and lets the leader assign the vote again',async()=>{
+ const w=previewWorkspace();
+ for(const [id,owner] of [['r1','seo'],['r2','jun']] as const){const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project',title:'카드 '+id});w.ideas.push(c);}
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['r1','r2']});
+ const voteId=vote(s)!.id;
+ vote(s)!.data.counts={r1:2,r2:1};
+ s=await run(s,'jun',{type:'closeTeamVote',projectId:'p-onboarding'});
+ await assert.rejects(run(s,'jun',{type:'revertAssignment',projectId:'p-onboarding',voteId}),/되돌릴 배정이 없/);
+ // The old way: a team-or-solo vote, then a join board that made a project.
+ s=await run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId});
+ const pathId=s.records.find(r=>r.kind==='pathVote')!.id;
+ s=await run(s,'jun',{type:'closePathVote',projectId:'p-onboarding',pathId});
+ s=await run(s,'jun',{type:'openJoinBoard',projectId:'p-onboarding',pathId,capacity:3});
+ const oldBoard=s.records.find((r):r is RecordOf<'joinBoard'>=>r.kind==='joinBoard')!.id;
+ s=await run(s,'seo',{type:'pickJoin',projectId:'p-onboarding',boardId:oldBoard,ideaId:'r1'});
+ s=await run(s,'jun',{type:'closeJoinBoard',projectId:'p-onboarding',boardId:oldBoard});
+ const madeId=s.records.find((r):r is RecordOf<'joinBoard'>=>r.id===oldBoard)!.data.projects!.r1;
+ assert.ok(s.workspace.projects.some(p=>p.id===madeId));
+ await assert.rejects(run(s,'jun',{type:'openFinalBoard',projectId:'p-onboarding',voteId,topRank:1,capacity:2}),/되돌려/);
+ await assert.rejects(run(s,'seo',{type:'revertAssignment',projectId:'p-onboarding',voteId}),/팀장/);
+ s=await run(s,'jun',{type:'revertAssignment',projectId:'p-onboarding',voteId});
+ assert.ok(!s.workspace.projects.some(p=>p.id===madeId));
+ assert.ok(!s.workspace.members.find(m=>m.id==='seo')!.projectIds?.includes(madeId));
+ assert.deepEqual(s.records.filter(r=>r.kind==='pathVote'||r.kind==='joinBoard').map(r=>(r.data as {state:string}).state),['reverted','reverted']);
+ // Assign again with the new settings.
+ s=await run(s,'jun',{type:'openFinalBoard',projectId:'p-onboarding',voteId,topRank:2,capacity:4,minutes:10});
+ const fb=s.records.find((r):r is RecordOf<'joinBoard'>=>r.id==='joinboard-'+voteId)!;
+ assert.deepEqual([fb.data.state,fb.data.capacity,fb.data.options.map(o=>o.ideaId)],['open',4,['r1','r2']]);
+ s=await run(s,'jun',{type:'revertAssignment',projectId:'p-onboarding',voteId});
+ s=await run(s,'jun',{type:'openFinalBoard',projectId:'p-onboarding',voteId,topRank:1,capacity:2});
+ assert.equal(s.records.find((r):r is RecordOf<'joinBoard'>=>r.id==='joinboard-'+voteId)!.data.options.length,1);
 });
 
 test('the leader adds cards finished after the vote opened, and can cancel the vote to start over',async()=>{

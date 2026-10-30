@@ -242,6 +242,25 @@ export function leaveMembership(c: Context, m: Member, projectId: string) {
   const rest = projectIdsOf(m).filter((id) => id !== projectId);
   membership(c, m, m.projectId === projectId ? rest[0] || null : m.projectId, rest);
 }
+// Removes live project rooms; their contents and a deletion record stay for recovery.
+export async function dropProjects(c: Context, projects: Project[], reason: string) {
+  const ids = projects.map((p) => p.id);
+  for (const m of await c.store.list<Member>(path(c, "members"))) {
+    const gone = ids.filter((id) => projectIdsOf(m).includes(id) || m.projectId === id);
+    if (!gone.length) continue;
+    const rest = projectIdsOf(m).filter((id) => !gone.includes(id));
+    membership(c, m, m.projectId && gone.includes(m.projectId) ? rest[0] || null : m.projectId, rest);
+    for (const id of gone) c.store.write(path(c, "projects/" + id + "/members/" + m.id), { status: "deleted", leftAt: c.now }, true);
+  }
+  for (const p of projects) {
+    c.store.write(path(c, "deletedProjects/" + p.id), { project: p, deletedAt: c.now, deletedBy: c.uid, reason });
+    for (const r of await c.store.list<WorkshopRecord>(path(c, "workshop"), [{ field: "projectId", value: p.id }]))
+      if (r.kind === "support") c.store.remove(path(c, "workshop/" + r.id));
+    c.store.remove(path(c, "projectSecrets/" + p.id));
+    c.store.remove(path(c, "projectDirectory/" + p.id));
+    c.store.remove(path(c, "projects/" + p.id));
+  }
+}
 export function activateMembership(c: Context, m: Member, projectId: string) {
   if (!projectIdsOf(m).includes(projectId)) fail("참여한 프로젝트가 아닙니다.", 403);
   membership(c, m, projectId, projectIdsOf(m));

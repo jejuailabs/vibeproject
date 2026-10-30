@@ -94,10 +94,10 @@ test("mobile member can create a vote, vote and operate its dashboard", async ({
   await dash.getByRole("button", { name: "투표 종료", exact: true }).tap();
   await dash.getByRole("button", { name: "닫기", exact: true }).tap();
   const closed = page.locator(".vote-card.closed");
-  await closed.getByRole("button", { name: "최종 팀 정하기", exact: true }).tap();
-  const final = page.getByRole("dialog", { name: "최종 팀 정하기", exact: true });
+  await closed.getByRole("button", { name: "배정하기", exact: true }).tap();
+  const final = page.getByRole("dialog", { name: "배정하기", exact: true });
   await fits(page, final);
-  await final.getByRole("button", { name: /개 팀으로 참여 받기$/ }).tap();
+  await final.getByRole("button", { name: /개로 배정 시작$/ }).tap();
   const join = page.getByRole("dialog", { name: "선정 프로젝트", exact: true });
   await fits(page, join);
   await join.getByRole("button", { name: "이 팀으로 들어가기", exact: true }).first().tap();

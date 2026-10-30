@@ -139,11 +139,12 @@ export interface DataMap {
   teamBallot: { round: number; voteId?: string; ideaId?: string; ideaIds?: string[] };
   // After a main vote: each member, under a nickname, goes with a team or alone on one of their own cards.
   // Picks are open to the whole room so everyone sees who goes where.
-  pathVote: { voteId: string; round: number; state: "open" | "closed"; openedAt: string; closedAt: string | null; endsAt: string | null;
+  // "reverted" hides a team-or-solo vote or join board the leader undid; the vote can be assigned again.
+  pathVote: { voteId: string; round: number; state: "open" | "closed" | "reverted";openedAt: string; closedAt: string | null; endsAt: string | null;
     picks: Record<string, { nickname: string; choice: "team" | "solo"; ideaId?: string }>; abstained?: number; endedBy?: "time" | "manual" };
   // After the team-or-solo vote: the top 5 and the solo cards, each joinable up to capacity; closing makes the real projects.
   // Opened straight from a closed vote (pathId ""), it lists the cards ranked 1st to topRank.
-  joinBoard: { pathId: string; voteId: string; round: number; state: "open" | "closed"; openedAt: string; closedAt: string | null; endsAt: string | null; capacity: number; topRank?: number;
+  joinBoard: { pathId: string; voteId: string; round: number; state: "open" | "closed" | "reverted";openedAt: string; closedAt: string | null; endsAt: string | null; capacity: number; topRank?: number;
     options: { ideaId: string; title: string; problem: string; ownerId: string; rank?: number; soloId?: string; soloNick?: string }[];
     picks: Record<string, { ideaId: string; at: string }>; endedBy?: "time" | "manual"; projects?: Record<string, string>; unassigned?: string[] };
   project: ProjectData;

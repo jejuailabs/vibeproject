@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronDown, Crown, Download, LoaderCircle, MessageCircle, Pencil, Plus, Sparkles, Trash2, Users, Vote, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronDown, Crown, Download, LoaderCircle, MessageCircle, Pencil, Plus, RotateCcw, Sparkles, Trash2, Users, Vote, X } from "lucide-react";
 import { IdeaRefinement } from "./idea-refinement";
 import { IdeaAuthorField } from "./idea-author-field";
 import { characterFor } from "@/lib/characters";
@@ -57,7 +57,7 @@ const actionLabels: Record<string, string> = {
   openTeamVote: "투표를 여는 중…", editTeamVote: "투표를 수정하는 중…", refreshTeamVote: "후보를 추가하는 중…", closeTeamVote: "투표를 마감하는 중…",
   cancelTeamVote: "투표를 취소하는 중…", deleteTeamVote: "투표를 삭제하는 중…",
   openPathVote: "팀·개별 투표를 여는 중…", closePathVote: "팀·개별 투표를 마감하는 중…",
-  openJoinBoard: "참가 받기를 여는 중…", openFinalBoard: "최종 팀을 여는 중…", closeJoinBoard: "프로젝트 만드는 중…", confirmProblem: "문제를 확정하는 중…",
+  openJoinBoard: "참가 받기를 여는 중…", openFinalBoard: "배정을 여는 중…", revertAssignment: "배정을 되돌리는 중…", closeJoinBoard: "프로젝트 만드는 중…", confirmProblem: "문제를 확정하는 중…",
 };
 function ActionFeedback(p: { pendingAction?: string; actionError?: string }) {
   return <>
@@ -144,13 +144,13 @@ export function ProjectSteps(p: StepsProps) {
   // A timed vote ticks every second; past its deadline nobody can vote, and the opener's screen closes it.
   const [now, setNow] = useState(() => Date.now());
   // Team-or-solo votes that follow a closed main vote, one per main vote.
-  const paths = recordsOf(p, "pathVote").filter((x) => x.projectId === team.id).map((room) => {
+  const paths = recordsOf(p, "pathVote").filter((x) => x.projectId === team.id && x.data.state !== "reverted").map((room) => {
     const pick = voteQueue.pathPicks[room.id];
     return pick ? { ...room, data: { ...room.data, picks: { ...room.data.picks, [me.id]: pick } } } : room;
   });
   const pathOf = (voteId: string) => paths.find((x) => x.data.voteId === voteId);
   // Project join boards that follow a closed team-or-solo vote.
-  const boards = recordsOf(p, "joinBoard").filter((x) => x.projectId === team.id).map((room) => {
+  const boards = recordsOf(p, "joinBoard").filter((x) => x.projectId === team.id && x.data.state !== "reverted").map((room) => {
     if (!Object.hasOwn(voteQueue.joinPicks, room.id)) return room;
     const pick = voteQueue.joinPicks[room.id], picks = { ...room.data.picks };
     if (pick) picks[me.id] = pick; else delete picks[me.id];
@@ -288,8 +288,10 @@ export function ProjectSteps(p: StepsProps) {
   const boardView = boards.find((x) => x.id === boardId);
   useEffect(() => { const d = boardRef.current; if (!d) return; if (boardView && !d.open) d.showModal(); else if (!boardView && d.open) d.close(); }, [boardView]);
   const [boardCap, setBoardCap] = useState(5), [boardMinutes, setBoardMinutes] = useState(10);
-  async function startBoard(pathId: string) {
-    if (await p.run({ type: "openJoinBoard", projectId: team.id, pathId, capacity: boardCap, ...(boardMinutes ? { minutes: boardMinutes } : {}) })) setBoardId("joinboard-" + pathId);
+  // Undo takes the vote back to just after it closed; projects the assignment made are removed.
+  function revertAssignment(v: RecordOf<"teamVote">, made: number) {
+    if (window.confirm("‘" + teamVoteTitle(v.data, cards) + "’ 배정을 되돌릴까요? 팀·개별 결과와 참가 명단이 사라지고" + (made ? ", 이 배정으로 만들어진 프로젝트 " + made + "개도 삭제돼요" : "") + ". 되돌린 뒤 다시 배정할 수 있어요."))
+      void p.run({ type: "revertAssignment", projectId: team.id, voteId: v.id });
   }
   // Final-team window: the leader or an administrator keeps the cards ranked 1st to N, then everyone joins one.
   const [finalVoteId, setFinalVoteId] = useState<string | null>(null), finalRef = useRef<HTMLDialogElement>(null), [finalRank, setFinalRank] = useState(1);
@@ -547,26 +549,15 @@ export function ProjectSteps(p: StepsProps) {
                 {(leader || me.role === "admin") && !ended && <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startVoteEdit(room)}><Pencil size={14} /> 투표 수정</button>}
                 {room.ownerId === me.id && room.data.state !== "cancelled" && <button type="button" className="secondary-button" onClick={() => setDashId(room.id)}><BarChart3 size={14} /> 대시보드</button>}
                 {room.data.state === "closed" && (() => {
-                  const pv = pathOf(room.id);
-                  if (pv) {
-                    const jb = boardOf(pv.id);
-                    return <>
-                      <button type="button" className="secondary-button path-open" onClick={() => openPath(pv.id)}><Users size={14} /> {pv.data.state === "open" && !timeUp(pv) ? "팀·개별 고르기" + (pv.data.endsAt ? " · " + clock(Date.parse(pv.data.endsAt) - now) : "") : "팀·개별 결과"}</button>
-                      {jb ? <button type="button" className="primary-button" onClick={() => setBoardId(jb.id)}><Crown size={14} /> {jb.data.state === "open" && !timeUp(jb) ? "선정 프로젝트 참가하기" + (jb.data.endsAt ? " · " + clock(Date.parse(jb.data.endsAt) - now) : "") : "프로젝트 배정 결과"}</button>
-                        : pv.data.state === "closed" && leader && !ended && <span className="path-start">
-                          <label>정원 <input type="number" min={1} max={100} value={boardCap} onChange={(e) => setBoardCap(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} aria-label="프로젝트 정원" />명</label>
-                          <select aria-label="참가 받기 시간" value={boardMinutes} onChange={(e) => setBoardMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{voteTimeLabel(m)}</option>)}</select>
-                          <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startBoard(pv.id)}><Crown size={14} /> 프로젝트 참가 받기</button>
-                        </span>}
-                    </>;
-                  }
-                  const fb = finalOf(room.id);
-                  if (fb) {
-                    const joined = Object.keys(fb.data.picks).length;
-                    return <button type="button" className="primary-button" onClick={() => setBoardId(fb.id)}><Users size={14} /> {fb.data.state === "open" && !timeUp(fb) ? "이 팀으로 들어가기 · " + joined + "명 참여" + (fb.data.endsAt ? " · " + clock(Date.parse(fb.data.endsAt) - now) : "") : "최종 팀 결과"}</button>;
-                  }
-                  if (!(leader || me.role === "admin") || ended) return null;
-                  return <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startFinal(room)}><Crown size={14} /> 최종 팀 정하기</button>;
+                  // Older rooms went through a team-or-solo vote first; newer ones go straight to assignment.
+                  const pv = pathOf(room.id), jb = finalOf(room.id) || (pv && boardOf(pv.id)), manager = (leader || me.role === "admin") && !ended;
+                  if (!pv && !jb) return manager ? <button type="button" className="primary-button" disabled={p.busy} onClick={() => startFinal(room)}><Crown size={14} /> 배정하기</button> : null;
+                  const joined = jb ? Object.keys(jb.data.picks).length : 0, made = jb ? Object.keys(jb.data.projects || {}).length : 0;
+                  return <>
+                    {pv && !jb && <button type="button" className="secondary-button path-open" onClick={() => openPath(pv.id)}><Users size={14} /> {pv.data.state === "open" && !timeUp(pv) ? "팀·개별 고르기" + (pv.data.endsAt ? " · " + clock(Date.parse(pv.data.endsAt) - now) : "") : "팀·개별 결과"}</button>}
+                    {jb && <button type="button" className="primary-button" onClick={() => setBoardId(jb.id)}><Users size={14} /> {jb.data.state === "open" && !timeUp(jb) ? "이 팀으로 들어가기 · " + joined + "명 참여" + (jb.data.endsAt ? " · " + clock(Date.parse(jb.data.endsAt) - now) : "") : "배정 결과"}</button>}
+                    {manager && <button type="button" className="secondary-button" disabled={p.busy} onClick={() => revertAssignment(room, made)}><RotateCcw size={14} /> 배정 되돌리기</button>}
+                  </>;
                 })()}
                 {leader && !ended && <button type="button" className="secondary-button danger" disabled={p.busy} onClick={() => { if (window.confirm("‘" + teamVoteTitle(room.data, cards) + "’ 투표를 지울까요? 받은 표도 함께 사라지고 되돌릴 수 없어요.")) p.run({ type: "deleteTeamVote", projectId: team.id, voteId: room.id }); }}><Trash2 size={14} /> 투표 삭제</button>}
               </div>
@@ -928,7 +919,7 @@ export function ProjectSteps(p: StepsProps) {
           );
         })()}
       </dialog>
-      <dialog ref={finalRef} className="modal path-vote" aria-label="최종 팀 정하기" onCancel={() => setFinalVoteId(null)} onClose={() => setFinalVoteId(null)}>
+      <dialog ref={finalRef} className="modal path-vote" aria-label="배정하기" onCancel={() => setFinalVoteId(null)} onClose={() => setFinalVoteId(null)}>
         {finalVote && (() => {
           const rows = ranked(finalVote), kept = rows.filter((r) => r.rank <= finalRank), maxRank = rows.at(-1)?.rank || 1;
           return (
@@ -936,21 +927,21 @@ export function ProjectSteps(p: StepsProps) {
               <div className="vote-detail-head">
                 <div>
                   <span className="path-kicker">{teamVoteTitle(finalVote.data, cards)} · 투표 결과</span>
-                  <h3>몇 등까지 최종 팀으로 할까요?</h3>
+                  <h3>배정하기</h3>
                 </div>
                 <button type="button" className="icon-button" aria-label="닫기" onClick={() => setFinalVoteId(null)}><X size={20} /></button>
               </div>
               <div className="path-form">
-                <label className="path-idea">최종 팀 <select aria-label="최종 팀 등수" value={finalRank} onChange={(e) => setFinalRank(Number(e.target.value))}>{Array.from({ length: maxRank }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}등까지</option>)}</select></label>
+                <label className="path-idea">1. 몇 등 아이디어까지 <select aria-label="몇 등 아이디어까지" value={finalRank} onChange={(e) => setFinalRank(Number(e.target.value))}>{Array.from({ length: maxRank }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}등까지</option>)}</select></label>
                 <ul className="final-list">{kept.map((r) => <li key={r.i.id}><b>{r.rank}등</b> {r.i.title} <small>{r.n}표</small></li>)}</ul>
                 {!rows.length && <p className="steps-muted">표를 받은 카드가 없어요.</p>}
-                <label className="path-idea">팀당 정원 <input type="number" min={1} max={100} value={boardCap} onChange={(e) => setBoardCap(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} aria-label="팀당 정원" />명</label>
-                <label className="path-idea">들어가기 받는 시간 <select aria-label="들어가기 받는 시간" value={boardMinutes} onChange={(e) => setBoardMinutes(Number(e.target.value))}>{voteTimes.map((m) => <option key={m} value={m}>{voteTimeLabel(m)}</option>)}</select></label>
-                <small>열면 참가자들이 들어갈 팀을 하나씩 고를 수 있어요. 마감하면 사람이 있는 팀마다 프로젝트가 만들어져요.</small>
+                <label className="path-idea">2. 아이디어 하나당 최대 인원 <input type="number" min={1} max={100} value={boardCap} onChange={(e) => setBoardCap(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} aria-label="아이디어 하나당 최대 인원" />명</label>
+                <label className="path-idea">3. 참여 받는 시간 <select aria-label="참여 받는 시간" value={boardMinutes} onChange={(e) => setBoardMinutes(Number(e.target.value))}>{voteTimes.map((m) => <option key={m} value={m}>{voteTimeLabel(m)}</option>)}</select></label>
+                <small>열면 참가자들이 들어갈 아이디어를 하나씩 고를 수 있어요. 시간이 끝나거나 마감하면 사람이 있는 아이디어마다 프로젝트가 만들어져요.</small>
                 <ActionFeedback {...p} />
                 <div className="vote-detail-actions">
                   <button type="button" className="secondary-button" onClick={() => setFinalVoteId(null)}>취소</button>
-                  <button type="button" className="primary-button" disabled={p.busy || !kept.length} onClick={openFinal}><Crown size={14} /> {kept.length}개 팀으로 참여 받기</button>
+                  <button type="button" className="primary-button" disabled={p.busy || !kept.length} onClick={openFinal}><Crown size={14} /> 아이디어 {kept.length}개로 배정 시작</button>
                 </div>
               </div>
             </>

@@ -14,6 +14,7 @@ import {
   joinMembership,
   activateMembership,
   addMembership,
+  dropProjects,
   member,
   project,
   idea,
@@ -448,8 +449,10 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       const vote = await teamVote(c, p.id, cmd.voteId);
       if (vote?.data.state !== "closed") fail("마감된 투표가 있어야 최종 팀을 정할 수 있습니다.");
       const id = "joinboard-" + vote.id;
-      if (await optional(c, id, "joinBoard")) fail("이 투표의 최종 팀은 이미 정했습니다.");
-      if (await optional(c, "pathvote-" + vote.id, "pathVote")) fail("이 투표는 팀·개별 투표로 진행 중입니다.");
+      const prior = await optional(c, id, "joinBoard");
+      if (prior && prior.data.state !== "reverted") fail("이 투표는 이미 배정했습니다. 다시 하려면 배정을 먼저 되돌려주세요.");
+      const oldPath = await optional(c, "pathvote-" + vote.id, "pathVote");
+      if (oldPath && oldPath.data.state !== "reverted") fail("이 투표는 팀·개별 투표로 진행 중입니다. 배정을 먼저 되돌려주세요.");
       const ready = await voteCards(c, p);
       const tally = vote.data.candidateIds.map((ideaId) => ({ ideaId, votes: vote.data.counts[ideaId] || 0 }));
       const options: RecordOf<"joinBoard">["data"]["options"] = tally
@@ -462,10 +465,30 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
         });
       if (!options.length) fail("표를 받은 카드가 없어 최종 팀을 정할 수 없습니다.");
       const endsAt = cmd.minutes ? new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString() : null;
-      const openedBoard = write(c, id, "joinBoard", { pathId: "", voteId: vote.id, round: vote.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, capacity: cmd.capacity, topRank: cmd.topRank, options, picks: {} }, "project", p.id);
+      const openedBoard = write(c, id, "joinBoard", { pathId: "", voteId: vote.id, round: vote.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, capacity: cmd.capacity, topRank: cmd.topRank, options, picks: {} }, "project", p.id, prior?.ownerId || c.uid, prior);
       event(c, "최종 팀 참여 받기", cmd.topRank + "등까지 · 프로젝트 " + options.length + "개 · 정원 " + cmd.capacity + "명", p.id, p.id);
       for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "최종 팀이 정해졌어요. 들어갈 팀을 골라주세요.", p.id, "project");
       return { id, records: [openedBoard] };
+    }
+    case "revertAssignment": {
+      // Back to just after the vote closed: the leader or an administrator can assign again.
+      const p = await project(c, cmd.projectId, "leader");
+      const vote = await teamVote(c, p.id, cmd.voteId);
+      if (vote?.data.state !== "closed") fail("마감된 투표만 배정을 되돌릴 수 있습니다.");
+      const pv = await optional(c, "pathvote-" + vote.id, "pathVote");
+      const boards = [await optional(c, "joinboard-" + vote.id, "joinBoard"), pv && await optional(c, "joinboard-" + pv.id, "joinBoard")]
+        .filter((b): b is RecordOf<"joinBoard"> => !!b && b.data.state !== "reverted");
+      if (!boards.length && (!pv || pv.data.state === "reverted")) fail("되돌릴 배정이 없습니다.");
+      const made: Project[] = [];
+      for (const b of boards) for (const pid of Object.values(b.data.projects || {})) {
+        const q = await c.store.read<Project>(path(c, "projects/" + pid));
+        if (q) made.push(q);
+      }
+      if (made.length) await dropProjects(c, made, "투표 배정 되돌리기");
+      for (const b of boards) write(c, b.id, "joinBoard", { ...b.data, state: "reverted" }, "project", p.id, b.ownerId, b);
+      if (pv && pv.data.state !== "reverted") write(c, pv.id, "pathVote", { ...pv.data, state: "reverted" }, "project", p.id, pv.ownerId, pv);
+      event(c, "배정 되돌리기", (vote.data.title || "문제 선정 투표") + " · 프로젝트 " + made.length + "개 삭제", p.id, p.id);
+      return { id: p.id };
     }
     case "pickJoin": {
       // Picking the project I am in again takes me out; solo choosers stay in their own project.
