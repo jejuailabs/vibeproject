@@ -129,7 +129,7 @@ test('leaders open simultaneous rooms and members keep independent votes and res
   await page.screenshot({ path: 'work/team-vote-rooms-mobile.png', fullPage: true });
 });
 
-test('after a vote closes, members choose team or solo under a nickname and everyone sees the lists', async ({ page }) => {
+test('after a vote closes, the leader keeps the top cards as final teams and members join them', async ({ page }) => {
   test.setTimeout(90000);
   await page.goto('/preview');
   await page.getByLabel('미리보기 참가자').selectOption('jun');
@@ -159,58 +159,32 @@ test('after a vote closes, members choose team or solo under a nickname and ever
   await expect(dash.getByRole('heading', { name: /투표 결과$/ })).toBeVisible();
   await dash.getByRole('button', { name: '닫기', exact: true }).click();
 
-  // The leader opens the team-or-solo vote and picks team.
-  await room.getByRole('button', { name: '팀·개별 투표 열기' }).click();
-  const path = page.getByRole('dialog', { name: '팀·개별 투표', exact: true });
-  await expect(path).toContainText(/남은 시간 0?[45]:\d\d/);
-  await expect(path.getByRole('button', { name: '제출', exact: true })).toBeDisabled();
-  await path.getByLabel('닉네임').fill('준');
-  await path.getByRole('button', { name: /팀으로 갈래요/ }).click();
-  await path.getByRole('button', { name: '제출', exact: true }).click();
-  await expect(path.locator('.path-result section').nth(0)).toContainText('준');
-  await path.getByRole('button', { name: '닫기', exact: true }).click();
-
-  // A member goes solo on their own card and only sees the lists after the close.
-  await page.getByLabel('미리보기 참가자').selectOption('seo');
-  await room.getByRole('button', { name: /팀·개별 고르기/ }).click();
-  await path.getByLabel('닉네임').fill('서');
-  await path.getByRole('button', { name: /개별로 갈래요/ }).click();
-  await expect(path.getByLabel('개별로 갈 내 아이디어')).toHaveValue(/.+/);
-  await path.getByRole('button', { name: '제출', exact: true }).click();
-  await expect(path).toContainText('나는 개별로 제출함');
-  await expect(path.locator('.path-result')).toHaveCount(0);
-  await path.getByRole('button', { name: '닫기', exact: true }).click();
-
-  await page.getByLabel('미리보기 참가자').selectOption('jun');
-  await room.getByRole('button', { name: /팀·개별 고르기/ }).click();
-  page.once('dialog', (d) => d.accept());
-  await path.getByRole('button', { name: '팀·개별 투표 종료', exact: true }).click();
-  await expect(path).toContainText('투표 종료');
-  await path.getByRole('button', { name: '닫기', exact: true }).click();
-
-  await page.getByLabel('미리보기 참가자').selectOption('seo');
-  await room.getByRole('button', { name: '팀·개별 결과' }).click();
-  await expect(path.locator('.path-result section').nth(0)).toContainText('팀으로 · 1명');
-  await expect(path.locator('.path-result section').nth(0)).toContainText('준');
-  await expect(path.locator('.path-result section').nth(1)).toContainText('개별로 · 1명');
-  await expect(path.locator('.path-result section').nth(1)).toContainText('서의 안내 문제');
-  await expect(path.getByLabel('닉네임')).toHaveCount(0);
-  await page.screenshot({ path: 'work/team-vote-path-result.png' });
-  await path.getByRole('button', { name: '닫기', exact: true }).click();
-
-  // The leader opens the join board: the 1st card and seo's solo card, seo already in their own.
-  await page.getByLabel('미리보기 참가자').selectOption('jun');
-  await room.getByLabel('프로젝트 정원').fill('3');
-  await room.getByRole('button', { name: '프로젝트 참가 받기' }).click();
+  // The leader keeps the 1st card as the final team; no team-or-solo vote is offered any more.
+  await expect(room.getByRole('button', { name: /팀·개별/ })).toHaveCount(0);
+  await room.getByRole('button', { name: '최종 팀 정하기', exact: true }).click();
+  const final = page.getByRole('dialog', { name: '최종 팀 정하기', exact: true });
+  await expect(final.getByLabel('최종 팀 등수')).toHaveValue('1');
+  await expect(final.locator('.final-list li')).toHaveCount(1);
+  await final.getByLabel('팀당 정원').fill('3');
+  await final.getByRole('button', { name: '1개 팀으로 참여 받기', exact: true }).click();
   const board = page.getByRole('dialog', { name: '선정 프로젝트', exact: true });
   const cardOf = (title: RegExp) => board.locator('.join-card').filter({ has: page.getByRole('heading', { name: title }) });
-  await expect(board.locator('.join-card')).toHaveCount(2);
+  await expect(board.locator('.join-card')).toHaveCount(1);
   await expect(cardOf(/준의 모임 문제/)).toContainText('1등');
-  await expect(cardOf(/서의 안내 문제/)).toContainText('서의 프로젝트');
-  await expect(cardOf(/서의 안내 문제/)).toContainText('1/3명');
-  await cardOf(/준의 모임 문제/).getByRole('button', { name: '참가', exact: true }).click();
+  await board.getByRole('button', { name: '닫기', exact: true }).click();
+
+  // A member joins the team; the list shows how many are in and who.
+  await page.getByLabel('미리보기 참가자').selectOption('seo');
+  await room.getByRole('button', { name: /이 팀으로 들어가기 · 0명 참여/ }).click();
+  await cardOf(/준의 모임 문제/).getByRole('button', { name: '이 팀으로 들어가기', exact: true }).click();
   await expect(cardOf(/준의 모임 문제/)).toContainText('1/3명');
-  await expect(cardOf(/준의 모임 문제/).getByRole('button', { name: /참가함/ })).toBeVisible();
+  await expect(cardOf(/준의 모임 문제/).getByRole('button', { name: '들어감 · 나가기', exact: true })).toBeVisible();
+  await board.getByRole('button', { name: '닫기', exact: true }).click();
+
+  await page.getByLabel('미리보기 참가자').selectOption('jun');
+  await room.getByRole('button', { name: /이 팀으로 들어가기 · 1명 참여/ }).click();
+  await cardOf(/준의 모임 문제/).getByRole('button', { name: '이 팀으로 들어가기', exact: true }).click();
+  await expect(cardOf(/준의 모임 문제/)).toContainText('2/3명');
   await page.screenshot({ path: 'work/team-vote-join-board.png' });
   page.once('dialog', (d) => d.accept());
   await board.getByRole('button', { name: '참가 받기 종료 · 프로젝트 만들기', exact: true }).click();
@@ -220,10 +194,9 @@ test('after a vote closes, members choose team or solo under a nickname and ever
 
   // Everyone sees the final assignment.
   await page.getByLabel('미리보기 참가자').selectOption('seo');
-  await room.getByRole('button', { name: '프로젝트 배정 결과' }).click();
-  await expect(cardOf(/서의 안내 문제/)).toContainText('내 프로젝트');
-  await expect(cardOf(/준의 모임 문제/)).toContainText('프로젝트 만들어짐');
-  await expect(board.locator('.join-unassigned')).toContainText('미배정 0명');
+  await room.getByRole('button', { name: '최종 팀 결과' }).click();
+  await expect(cardOf(/준의 모임 문제/)).toContainText('내 프로젝트');
+  await expect(cardOf(/준의 모임 문제/)).toContainText('2/3명');
 });
 
 test('the leader checks which newly finished cards join an open vote, newest edits first', async ({ page }) => {

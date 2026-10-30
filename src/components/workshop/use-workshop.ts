@@ -17,7 +17,7 @@ import { basicCard, basicCoach, basicDraft, type CardInput, type CardReply, type
 // These commands return the changed records without changing workspace cards,
 // membership or projects. Events and notifications arrive on the next poll.
 const recordOnlyCommands = new Set(["castTeamVote", "openTeamVote", "editTeamVote", "refreshTeamVote", "cancelTeamVote", "deleteTeamVote",
-  "closeTeamVote", "openPathVote", "pickPath", "closePathVote", "openJoinBoard", "pickJoin"]);
+  "closeTeamVote", "openPathVote", "pickPath", "closePathVote", "openJoinBoard", "openFinalBoard", "pickJoin"]);
 export function useWorkshop({
   data,
   setData,

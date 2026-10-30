@@ -57,7 +57,7 @@ const actionLabels: Record<string, string> = {
   openTeamVote: "투표를 여는 중…", editTeamVote: "투표를 수정하는 중…", refreshTeamVote: "후보를 추가하는 중…", closeTeamVote: "투표를 마감하는 중…",
   cancelTeamVote: "투표를 취소하는 중…", deleteTeamVote: "투표를 삭제하는 중…",
   openPathVote: "팀·개별 투표를 여는 중…", closePathVote: "팀·개별 투표를 마감하는 중…",
-  openJoinBoard: "참가 받기를 여는 중…", closeJoinBoard: "프로젝트 만드는 중…", confirmProblem: "문제를 확정하는 중…",
+  openJoinBoard: "참가 받기를 여는 중…", openFinalBoard: "최종 팀을 여는 중…", closeJoinBoard: "프로젝트 만드는 중…", confirmProblem: "문제를 확정하는 중…",
 };
 function ActionFeedback(p: { pendingAction?: string; actionError?: string }) {
   return <>
@@ -157,6 +157,8 @@ export function ProjectSteps(p: StepsProps) {
     return { ...room, data: { ...room.data, picks } };
   });
   const boardOf = (pathId: string) => boards.find((x) => x.data.pathId === pathId);
+  // Final-team boards opened straight from a closed vote, without a team-or-solo vote.
+  const finalOf = (voteId: string) => boards.find((x) => !x.data.pathId && x.data.voteId === voteId);
   const timed = step === "confirm" && [...votes, ...paths, ...boards].some((v) => v.data.state === "open" && v.data.endsAt);
   useEffect(() => { if (!timed) return; setNow(Date.now()); const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [timed]);
   const timeUp = (v: { data: { state: string; endsAt?: string | null } }) => v.data.state === "open" && !!v.data.endsAt && Date.parse(v.data.endsAt) <= now;
@@ -272,14 +274,11 @@ export function ProjectSteps(p: StepsProps) {
   const [pathId, setPathId] = useState<string | null>(null), pathRef = useRef<HTMLDialogElement>(null);
   const pathView = paths.find((x) => x.id === pathId);
   useEffect(() => { const d = pathRef.current; if (!d) return; if (pathView && !d.open) d.showModal(); else if (!pathView && d.open) d.close(); }, [pathView]);
-  const [pathMinutes, setPathMinutes] = useState(5), [nick, setNick] = useState(""), [choice, setChoice] = useState<"team" | "solo" | "">(""), [soloIdea, setSoloIdea] = useState("");
+  const [nick, setNick] = useState(""), [choice, setChoice] = useState<"team" | "solo" | "">(""), [soloIdea, setSoloIdea] = useState("");
   const myProblems = problems.filter((i) => i.ownerId === me.id);
   function openPath(id: string) {
     const mine = paths.find((x) => x.id === id)?.data.picks[me.id];
     setNick(mine?.nickname || ""); setChoice(mine?.choice || ""); setSoloIdea(mine?.ideaId || myProblems[0]?.id || ""); setPathId(id);
-  }
-  async function startPath(voteId: string) {
-    if (await p.run({ type: "openPathVote", projectId: team.id, voteId, ...(pathMinutes ? { minutes: pathMinutes } : {}) })) openPath("pathvote-" + voteId);
   }
   function submitPath() {
     if (pathView && choice && !(p.busy && !voteQueue.saving)) voteQueue.pickPath({ type: "pickPath", projectId: team.id, pathId: pathView.id, nickname: nick.trim(), choice, ...(choice === "solo" ? { ideaId: soloIdea } : {}) });
@@ -291,6 +290,21 @@ export function ProjectSteps(p: StepsProps) {
   const [boardCap, setBoardCap] = useState(5), [boardMinutes, setBoardMinutes] = useState(10);
   async function startBoard(pathId: string) {
     if (await p.run({ type: "openJoinBoard", projectId: team.id, pathId, capacity: boardCap, ...(boardMinutes ? { minutes: boardMinutes } : {}) })) setBoardId("joinboard-" + pathId);
+  }
+  // Final-team window: the leader or an administrator keeps the cards ranked 1st to N, then everyone joins one.
+  const [finalVoteId, setFinalVoteId] = useState<string | null>(null), finalRef = useRef<HTMLDialogElement>(null), [finalRank, setFinalRank] = useState(1);
+  const finalVote = votes.find((v) => v.id === finalVoteId && v.data.state === "closed");
+  useEffect(() => { const d = finalRef.current; if (!d) return; if (finalVote && !d.open) d.showModal(); else if (!finalVote && d.open) d.close(); }, [finalVote]);
+  const ranked = (v: RecordOf<"teamVote">) => {
+    const rows = cards.filter((i) => v.data.candidateIds.includes(i.id)).map((i) => ({ i, n: v.data.counts[i.id] || 0 }));
+    return rows.map((r) => ({ ...r, rank: rows.filter((o) => o.n > r.n).length + 1 })).filter((r) => r.n > 0).sort((a, b) => a.rank - b.rank);
+  };
+  function startFinal(v: RecordOf<"teamVote">) { setFinalRank(Math.min(5, Math.max(1, ranked(v).at(-1)?.rank || 1))); setFinalVoteId(v.id); }
+  async function openFinal() {
+    if (!finalVote) return;
+    if (await p.run({ type: "openFinalBoard", projectId: team.id, voteId: finalVote.id, topRank: finalRank, capacity: boardCap, ...(boardMinutes ? { minutes: boardMinutes } : {}) })) {
+      setFinalVoteId(null); setBoardId("joinboard-" + finalVote.id);
+    }
   }
   // On the board people show by their team-or-solo nickname, else their account name.
   const nameOn = (b: (typeof boards)[number], uid: string) => paths.find((x) => x.id === b.data.pathId)?.data.picks[uid]?.nickname || w.members.find((m) => m.id === uid)?.name || "팀원";
@@ -515,7 +529,7 @@ export function ProjectSteps(p: StepsProps) {
       )}
 
       {step === "confirm" && voteLinkError && <p className="form-error" role="alert">{voteLinkError}</p>}
-      {step === "confirm" && !picking && !adding && !dash && !pathView && !boardView && <ActionFeedback {...p} />}
+      {step === "confirm" && !picking && !adding && !dash && !pathView && !boardView && !finalVote && <ActionFeedback {...p} />}
       {step === "confirm" && p.initialVoteId && p.recordsReady === false && <p role="status">공유한 투표를 불러오는 중이에요.</p>}
       {step === "confirm" && !voteBoard && (
         <div className="vote-list">
@@ -546,11 +560,13 @@ export function ProjectSteps(p: StepsProps) {
                         </span>}
                     </>;
                   }
-                  if (!leader || ended) return null;
-                  return <span className="path-start">
-                    <select aria-label="팀·개별 투표 시간" value={pathMinutes} onChange={(e) => setPathMinutes(Number(e.target.value))} disabled={p.busy}>{voteTimes.map((m) => <option key={m} value={m}>{voteTimeLabel(m)}</option>)}</select>
-                    <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startPath(room.id)}><Users size={14} /> 팀·개별 투표 열기</button>
-                  </span>;
+                  const fb = finalOf(room.id);
+                  if (fb) {
+                    const joined = Object.keys(fb.data.picks).length;
+                    return <button type="button" className="primary-button" onClick={() => setBoardId(fb.id)}><Users size={14} /> {fb.data.state === "open" && !timeUp(fb) ? "이 팀으로 들어가기 · " + joined + "명 참여" + (fb.data.endsAt ? " · " + clock(Date.parse(fb.data.endsAt) - now) : "") : "최종 팀 결과"}</button>;
+                  }
+                  if (!(leader || me.role === "admin") || ended) return null;
+                  return <button type="button" className="secondary-button" disabled={p.busy} onClick={() => startFinal(room)}><Crown size={14} /> 최종 팀 정하기</button>;
                 })()}
                 {leader && !ended && <button type="button" className="secondary-button danger" disabled={p.busy} onClick={() => { if (window.confirm("‘" + teamVoteTitle(room.data, cards) + "’ 투표를 지울까요? 받은 표도 함께 사라지고 되돌릴 수 없어요.")) p.run({ type: "deleteTeamVote", projectId: team.id, voteId: room.id }); }}><Trash2 size={14} /> 투표 삭제</button>}
               </div>
@@ -867,7 +883,7 @@ export function ProjectSteps(p: StepsProps) {
       </dialog>
       <dialog ref={boardRef} className="vote-dash join-board" aria-label="선정 프로젝트" onCancel={() => setBoardId(null)} onClose={() => setBoardId(null)}>
         {boardView && (() => {
-          const d = boardView.data, live = d.state === "open" && !timeUp(boardView), opener = boardView.ownerId === me.id;
+          const d = boardView.data, live = d.state === "open" && !timeUp(boardView), opener = boardView.ownerId === me.id || leader || me.role === "admin";
           const mine = d.picks[me.id]?.ideaId, amSolo = d.options.some((o) => o.soloId === me.id);
           const joinedTo = (ideaId: string) => Object.entries(d.picks).filter(([, x]) => x.ideaId === ideaId).sort((a, b) => a[1].at.localeCompare(b[1].at)).map(([uid]) => uid);
           return (
@@ -875,8 +891,8 @@ export function ProjectSteps(p: StepsProps) {
               <header className="vote-dash-head">
                 <div>
                   <span>{teamVoteTitle(votes.find((v) => v.id === d.voteId)?.data, cards)} · {live ? (d.endsAt ? "남은 시간 " + clock(Date.parse(d.endsAt) - now) : "시간 제한 없음") : d.state === "open" ? "시간 종료 · 결과를 모으고 있어요" : "참가 마감"} · 정원 {d.capacity}명</span>
-                  <h2>{d.state === "closed" ? "프로젝트 배정 결과" : "선정 프로젝트"}</h2>
-                  {live && <small>{amSolo ? "개별로 골라서 내 프로젝트에 참가해 있어요." : "참가할 프로젝트를 하나 골라요. 마감 전까지는 바꿀 수 있어요."}</small>}
+                  <h2>{d.state === "closed" ? "프로젝트 배정 결과" : d.topRank ? "최종 팀 · " + d.topRank + "등까지" : "선정 프로젝트"}</h2>
+                  {live && <small>{amSolo ? "개별로 골라서 내 프로젝트에 참가해 있어요." : (d.topRank ? "들어갈 팀을 하나 골라요." : "참가할 프로젝트를 하나 골라요.") + " 마감 전까지는 바꿀 수 있어요."} · 지금 {Object.keys(d.picks).length}/{members.length}명 들어감</small>}
                   {live && <p className="join-creation-notice">{d.endsAt ? "시간이 끝나면 참가자가 있는 항목마다 프로젝트가 자동 생성됩니다." : "리더가 참가 접수를 마감하면 참가자가 있는 항목마다 프로젝트가 생성됩니다."} 카드 작성자가 참가하면 리더가 되고, 참가하지 않으면 가장 먼저 참가한 사람이 리더가 됩니다.</p>}
                 </div>
                 <button type="button" className="icon-button" aria-label="닫기" onClick={() => setBoardId(null)}><X size={22} /></button>
@@ -892,7 +908,7 @@ export function ProjectSteps(p: StepsProps) {
                       <div className="join-people"><b>{joined.length}/{d.capacity}명</b>{joined.map((uid) => <span key={uid}>{nameOn(boardView, uid)}</span>)}</div>
                       <footer>
                         {live && !ended ? (amSolo ? (here ? <em>내 프로젝트</em> : null)
-                          : <button type="button" className={here ? "primary-button" : "secondary-button"} aria-pressed={here} disabled={(p.busy && !voteQueue.saving) || (!here && full)} onClick={() => voteQueue.pickJoin({ type: "pickJoin", projectId: team.id, boardId: boardView.id, ideaId: o.ideaId }, d.picks[me.id] || null)}>{here ? <><Check size={14} /> 참가함 · 취소</> : full ? "정원 마감" : "참가"}</button>)
+                          : <button type="button" className={here ? "primary-button" : "secondary-button"} aria-pressed={here} disabled={(p.busy && !voteQueue.saving) || (!here && full)} onClick={() => voteQueue.pickJoin({ type: "pickJoin", projectId: team.id, boardId: boardView.id, ideaId: o.ideaId }, d.picks[me.id] || null)}>{here ? <><Check size={14} /> {d.topRank ? "들어감 · 나가기" : "참가함 · 취소"}</> : full ? "정원 마감" : d.topRank ? "이 팀으로 들어가기" : "참가"}</button>)
                           : d.state === "closed" ? (made ? (w.projects.some((p) => p.id === made) ? <em>{here ? "내 프로젝트 · 프로젝트 목록에서 열 수 있어요" : "프로젝트 만들어짐"}</em> : <em className="none">삭제된 프로젝트</em>) : <em className="none">참가자 없음</em>) : null}
                       </footer>
                     </article>
@@ -908,6 +924,35 @@ export function ProjectSteps(p: StepsProps) {
                 {d.state === "closed" && mine && p.onBack && <button type="button" className="secondary-button" onClick={() => { setBoardId(null); p.onBack!(); }}>내 프로젝트 목록으로 <ArrowRight size={15} /></button>}
                 {opener && d.state === "open" && !ended && <button type="button" className="primary-button" disabled={p.busy || voteQueue.saving} onClick={() => { if (window.confirm("참가 받기를 마감할까요? 참가자가 있는 프로젝트가 실제 프로젝트 방으로 만들어져요.")) p.run({ type: "closeJoinBoard", projectId: team.id, boardId: boardView.id }); }}>{p.pendingAction === "closeJoinBoard" ? "프로젝트 만드는 중…" : "참가 받기 종료 · 프로젝트 만들기"}</button>}
               </footer>
+            </>
+          );
+        })()}
+      </dialog>
+      <dialog ref={finalRef} className="modal path-vote" aria-label="최종 팀 정하기" onCancel={() => setFinalVoteId(null)} onClose={() => setFinalVoteId(null)}>
+        {finalVote && (() => {
+          const rows = ranked(finalVote), kept = rows.filter((r) => r.rank <= finalRank), maxRank = rows.at(-1)?.rank || 1;
+          return (
+            <>
+              <div className="vote-detail-head">
+                <div>
+                  <span className="path-kicker">{teamVoteTitle(finalVote.data, cards)} · 투표 결과</span>
+                  <h3>몇 등까지 최종 팀으로 할까요?</h3>
+                </div>
+                <button type="button" className="icon-button" aria-label="닫기" onClick={() => setFinalVoteId(null)}><X size={20} /></button>
+              </div>
+              <div className="path-form">
+                <label className="path-idea">최종 팀 <select aria-label="최종 팀 등수" value={finalRank} onChange={(e) => setFinalRank(Number(e.target.value))}>{Array.from({ length: maxRank }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n}등까지</option>)}</select></label>
+                <ul className="final-list">{kept.map((r) => <li key={r.i.id}><b>{r.rank}등</b> {r.i.title} <small>{r.n}표</small></li>)}</ul>
+                {!rows.length && <p className="steps-muted">표를 받은 카드가 없어요.</p>}
+                <label className="path-idea">팀당 정원 <input type="number" min={1} max={100} value={boardCap} onChange={(e) => setBoardCap(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} aria-label="팀당 정원" />명</label>
+                <label className="path-idea">들어가기 받는 시간 <select aria-label="들어가기 받는 시간" value={boardMinutes} onChange={(e) => setBoardMinutes(Number(e.target.value))}>{voteTimes.map((m) => <option key={m} value={m}>{voteTimeLabel(m)}</option>)}</select></label>
+                <small>열면 참가자들이 들어갈 팀을 하나씩 고를 수 있어요. 마감하면 사람이 있는 팀마다 프로젝트가 만들어져요.</small>
+                <ActionFeedback {...p} />
+                <div className="vote-detail-actions">
+                  <button type="button" className="secondary-button" onClick={() => setFinalVoteId(null)}>취소</button>
+                  <button type="button" className="primary-button" disabled={p.busy || !kept.length} onClick={openFinal}><Crown size={14} /> {kept.length}개 팀으로 참여 받기</button>
+                </div>
+              </div>
             </>
           );
         })()}

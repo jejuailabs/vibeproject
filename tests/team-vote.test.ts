@@ -311,6 +311,34 @@ test('the join board lists the top 5 and solo cards, caps each project, and clos
  assert.deepEqual(jb().data.unassigned,roomMembers.filter(id=>!['jun','seo'].includes(id)));
 });
 
+test('the leader keeps the cards ranked 1st to N as final teams and members join them without a team-or-solo vote',async()=>{
+ const w=previewWorkspace();
+ for(const [id,owner] of [['f1','seo'],['f2','jun'],['f3','seo'],['f4','jun']] as const){const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project',title:'카드 '+id});w.ideas.push(c);}
+ let s:State={workspace:w,records:[]};
+ s=await run(s,'jun',{type:'openTeamVote',projectId:'p-onboarding',candidateIds:['f1','f2','f3','f4']});
+ const voteId=vote(s)!.id;
+ await assert.rejects(run(s,'jun',{type:'openFinalBoard',projectId:'p-onboarding',voteId,topRank:2,capacity:2}),/마감된 투표/);
+ vote(s)!.data.counts={f1:3,f2:2,f3:2,f4:0};
+ s=await run(s,'jun',{type:'closeTeamVote',projectId:'p-onboarding'});
+ await assert.rejects(run(s,'seo',{type:'openFinalBoard',projectId:'p-onboarding',voteId,topRank:2,capacity:2}),/팀장/);
+ s=await run(s,'jun',{type:'openFinalBoard',projectId:'p-onboarding',voteId,topRank:2,capacity:2});
+ const jb=()=>s.records.find((r):r is RecordOf<'joinBoard'>=>r.kind==='joinBoard')!;
+ const boardId=responseRecord(s,'joinBoard','joinboard-'+voteId).id;
+ // Tied cards share 2nd place, so both stay; the card with no votes is left out.
+ assert.deepEqual(jb().data.options.map(o=>[o.ideaId,o.rank]),[['f1',1],['f2',2],['f3',2]]);
+ assert.deepEqual([jb().data.pathId,jb().data.topRank,jb().data.picks],['',2,{}]);
+ await assert.rejects(run(s,'jun',{type:'openFinalBoard',projectId:'p-onboarding',voteId,topRank:1,capacity:2}),/이미 정했/);
+ await assert.rejects(run(s,'jun',{type:'openPathVote',projectId:'p-onboarding',voteId}),/최종 팀/);
+ s=await run(s,'seo',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'f2'});
+ s=await run(s,'jun',{type:'pickJoin',projectId:'p-onboarding',boardId,ideaId:'f2'});
+ assert.deepEqual(Object.keys(jb().data.picks).sort(),['jun','seo']);
+ s=await run(s,'jun',{type:'closeJoinBoard',projectId:'p-onboarding',boardId});
+ const made=jb().data.projects!;
+ assert.deepEqual(Object.keys(made),['f2']);
+ const p2=s.workspace.projects.find(p=>p.id===made.f2)!;
+ assert.deepEqual([p2.leaderId,[...p2.memberIds].sort()],['jun',['jun','seo']]);
+});
+
 test('the leader adds cards finished after the vote opened, and can cancel the vote to start over',async()=>{
  const w=previewWorkspace();
  const make=(id:string,owner:string)=>{const c=structuredClone(w.ideas.find(i=>i.id==='i1')!);Object.assign(c,{id,ownerId:owner,projectId:'p-onboarding',scope:'project'});return c;};

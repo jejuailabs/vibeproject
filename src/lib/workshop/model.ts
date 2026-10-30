@@ -142,7 +142,8 @@ export interface DataMap {
   pathVote: { voteId: string; round: number; state: "open" | "closed"; openedAt: string; closedAt: string | null; endsAt: string | null;
     picks: Record<string, { nickname: string; choice: "team" | "solo"; ideaId?: string }>; abstained?: number; endedBy?: "time" | "manual" };
   // After the team-or-solo vote: the top 5 and the solo cards, each joinable up to capacity; closing makes the real projects.
-  joinBoard: { pathId: string; voteId: string; round: number; state: "open" | "closed"; openedAt: string; closedAt: string | null; endsAt: string | null; capacity: number;
+  // Opened straight from a closed vote (pathId ""), it lists the cards ranked 1st to topRank.
+  joinBoard: { pathId: string; voteId: string; round: number; state: "open" | "closed"; openedAt: string; closedAt: string | null; endsAt: string | null; capacity: number; topRank?: number;
     options: { ideaId: string; title: string; problem: string; ownerId: string; rank?: number; soloId?: string; soloNick?: string }[];
     picks: Record<string, { ideaId: string; at: string }>; endedBy?: "time" | "manual"; projects?: Record<string, string>; unassigned?: string[] };
   project: ProjectData;

@@ -170,6 +170,8 @@ export const workshopCommand = z.discriminatedUnion("type", [
   S({ type: z.literal("pickPath"), ...project, pathId: id, nickname: z.string().trim().min(1).max(20), choice: z.enum(["team", "solo"]), ideaId: id.optional() }),
   S({ type: z.literal("closePathVote"), ...project, pathId: id }),
   S({ type: z.literal("openJoinBoard"), ...project, pathId: id, capacity: z.number().int().min(1).max(100), minutes: voteMinutes }),
+  // Straight from a closed vote: the leader or an administrator keeps the cards ranked 1st to topRank as final teams.
+  S({ type: z.literal("openFinalBoard"), ...project, voteId: id, topRank: z.number().int().min(1).max(100), capacity: z.number().int().min(1).max(100), minutes: voteMinutes }),
   S({ type: z.literal("pickJoin"), ...project, boardId: id, ideaId: id }),
   S({ type: z.literal("closeJoinBoard"), ...project, boardId: id }),
   S({

@@ -378,6 +378,7 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       if (vote?.data.state !== "closed") fail("마감된 투표가 있어야 팀·개별 투표를 열 수 있습니다.");
       const id = "pathvote-" + vote.id;
       if (await optional(c, id, "pathVote")) fail("이 투표의 팀·개별 투표는 이미 열었습니다.");
+      if (await optional(c, "joinboard-" + vote.id, "joinBoard")) fail("이 투표는 이미 최종 팀을 정했습니다.");
       const endsAt = cmd.minutes ? new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString() : null;
       const openedPath = write(c, id, "pathVote", { voteId: vote.id, round: vote.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, picks: {} }, "project", p.id);
       event(c, "팀·개별 투표 열기", vote.data.title || "문제 선정 투표 결과", p.id, p.id);
@@ -441,6 +442,31 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "참가할 프로젝트를 골라주세요.", p.id, "project");
       return { id, records: [openedBoard] };
     }
+    case "openFinalBoard": {
+      // Skips the team-or-solo vote: the cards ranked 1st to topRank become the projects people join.
+      const p = await project(c, cmd.projectId, "leader");
+      const vote = await teamVote(c, p.id, cmd.voteId);
+      if (vote?.data.state !== "closed") fail("마감된 투표가 있어야 최종 팀을 정할 수 있습니다.");
+      const id = "joinboard-" + vote.id;
+      if (await optional(c, id, "joinBoard")) fail("이 투표의 최종 팀은 이미 정했습니다.");
+      if (await optional(c, "pathvote-" + vote.id, "pathVote")) fail("이 투표는 팀·개별 투표로 진행 중입니다.");
+      const ready = await voteCards(c, p);
+      const tally = vote.data.candidateIds.map((ideaId) => ({ ideaId, votes: vote.data.counts[ideaId] || 0 }));
+      const options: RecordOf<"joinBoard">["data"]["options"] = tally
+        .map((t) => ({ ...t, rank: tally.filter((o) => o.votes > t.votes).length + 1 }))
+        .filter((t) => t.votes > 0 && t.rank <= cmd.topRank)
+        .sort((a, b) => a.rank - b.rank)
+        .flatMap((t) => {
+          const i = ready.find((x) => x.id === t.ideaId);
+          return i ? [{ ideaId: i.id, title: i.title, problem: i.refinement ? statement(i.refinement) : i.title, ownerId: i.ownerId, rank: t.rank }] : [];
+        });
+      if (!options.length) fail("표를 받은 카드가 없어 최종 팀을 정할 수 없습니다.");
+      const endsAt = cmd.minutes ? new Date(Date.parse(c.now) + cmd.minutes * 60000).toISOString() : null;
+      const openedBoard = write(c, id, "joinBoard", { pathId: "", voteId: vote.id, round: vote.data.round, state: "open", openedAt: c.now, closedAt: null, endsAt, capacity: cmd.capacity, topRank: cmd.topRank, options, picks: {} }, "project", p.id);
+      event(c, "최종 팀 참여 받기", cmd.topRank + "등까지 · 프로젝트 " + options.length + "개 · 정원 " + cmd.capacity + "명", p.id, p.id);
+      for (const uid of p.memberIds) if (uid !== c.uid) notify(c, uid, "최종 팀이 정해졌어요. 들어갈 팀을 골라주세요.", p.id, "project");
+      return { id, records: [openedBoard] };
+    }
     case "pickJoin": {
       // Picking the project I am in again takes me out; solo choosers stay in their own project.
       const p = await project(c, cmd.projectId);
@@ -467,7 +493,7 @@ export async function lobby(c: Context, cmd: WorkshopCommand) {
       if (!jb || jb.projectId !== p.id) fail("이 프로젝트의 참가 게시판이 아닙니다.");
       if (jb.data.state !== "open") fail("열려 있는 참가 받기가 없습니다.");
       const timeUp = !!jb.data.endsAt && jb.data.endsAt <= c.now;
-      if (p.leaderId !== c.uid && !timeUp) fail("팀장이 확정할 수 있습니다.", 403);
+      if (p.leaderId !== c.uid && c.me.role !== "admin" && !timeUp) fail("팀장이 확정할 수 있습니다.", 403);
       const projects: Record<string, string> = {};
       let n = 0;
       for (const o of jb.data.options) {
